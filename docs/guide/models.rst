@@ -1,4 +1,4 @@
- .. _Drescription of models :
+ .. _Description of models :
 
 Models
 ===============
@@ -6,18 +6,43 @@ Models
 Transformers
 -------------
 
-As of now, optihood is available as an open source code and needs to be installed from source. Please follow the
-Modelsm models modesl....and should be
+1. Scheduled model for transformer\
+...................................
+To prevent transformers from production DHW and SH at the same, one can used the schedule transformer. the following
+equations allow them to produce only DHW during a fixed time interval per day and only SH for the rest of the day.
 
-1. Generic Combined transformers (GDY)
+.. math::
+    \left\{\begin{array}{c}
+    P_{D H W}(t)=P_{\text {input }}(t) \times \eta_{D H W}, t \in T_{D H W} \\
+    P_{S H}(t)=P_{\text {input }}(t) \times \eta_{S H}, t \in T_{S H}
+    \end{array}\right.
 
-2. Air Source Heat Pumps (SPA)
 
 
-3. Ground Source Heat pumps (SPA)
+With P the operating power for inputs and outputs, :math:{eta} the efficiencies of the transformers (HP have different
+COP for DHW and SH based on the output temperature) and T the timesteps allocated for DHW and SH.
+
+2. Combined model for transformers
+..................................
+Since the converters need to produce SH and DHW at different temperatures they cannot physically supply both services
+at the same time. This is especially important for HP which have non-negligeable different COP for SH and DHW
+production. However, if we consider that a timestep of one hour is subdivided to produce SH and DHW at different times,
+we can formulated the newly implemented model in the following equation. It allows each heat transformer to produce both
+SH and DHW during the same timestep while respecting the input/output energy balance constraint.
+
+.. math::
+    P_input (t)=(P_DHW (t))/η_DHW +(P_SH (t))/η_SH ,∀t
+
+3. Air Source Heat Pumps (SPA)
+...............................
 
 
-4. Combined heat and power (GDY)
+4. Ground Source Heat pumps (SPA)
+...................................
+
+
+5. Combined heat and power
+..........................
 
 The modeling of the component for Generic Combined transformers is built from a class called "CHP" which is a specificity of the "GenericCHP" class of the oemof.solph library.
 The physical model used to model this component is an energy transformation from an incoming stream modeling the energy source of supply to the CHP machine. The outgoing flows of this component consist of both electrical and thermal energy.
@@ -35,7 +60,9 @@ https://oemof-solph.readthedocs.io/en/latest/usage.html#genericchp-component
 The "solph.Investment" function is used in the code to represent the investment costs associated with a CHP system are modeled with the oemof.solph package. It is used to calculate the optimal investment costs as part of solving the optimization model. The environmental costs of a CHP are also implemented.
 
 
-5. Boilers (GDY)
+
+6. Boilers (GDY)
+................
 
 The modeling of the component for boilers is built from a class called "GasBoiler" which is a specificity of the "Transformer" class of the oemof.solph library.
 The physical model used to model this component is a linear transformation of the incoming flow, here the gas or biomass, to an outgoing flow. A conversion factor is applied to the output flow according to the boiler efficiency.
@@ -47,6 +74,7 @@ The "solph.Investment" function is used in the code to represent the investment 
 
 
 6. Electric Rod (GDY)
+.....................
 
 The modeling of the component for electric rods is built from a class called "ElectricRod" which is a specificity of the "Transformer" class of the oemof.solph library.
 
@@ -55,7 +83,6 @@ The physical model used is the same as for a boiler with a linear transformation
 Pelec_in = Qsh/efficiencySH + Qdhw/efficiencyDHW
 
 More information :
-
 https://oemof-solph.readthedocs.io/en/latest/reference/oemof.solph.components.html#module-oemof.solph.components._transformer
 
 The financial and environmental costs are also defined with the oemof.soph package.
@@ -63,10 +90,12 @@ The financial and environmental costs are also defined with the oemof.soph packa
 Solar technologies
 -------------
 1. Solar thermal (SPA)
+.....................
 --> link to OEMOF
 + differential temperature levels
 
 2. Photovoltaics (SPA)
+......................
 --> link to OEMOF
 
 Energy Storage
@@ -74,6 +103,7 @@ Energy Storage
 Optihood uses in its code the modeling of components for energy storage. The modeling of these storage components is done through the oemof-solph library. The GenericStorage function is used to model a storage component with an input argument and an output argument. Two classes have been created, one for electrical storage and the other for thermal storage.
 
 1. Electric Batteries (GDY)
+...........................
 
 The modeling of the component for electrical storage is built from a class called "ElectricalStorage" which is a specificity of the "GenericStorage" class of the oemof.solph library. The "ElectricalStorage" class uses the "solph.Flow" object to represent the incoming and outgoing energy flows. This class includes a constructor with several arguments: the definition of the inputs and outputs of the system, the energy loss rate, the initial storage level, the conversion efficiency of the incoming and outgoing energy, the minimum and maximum capacity of the storage, the investment costs and the distribution mode in particular.
 
@@ -109,7 +139,7 @@ The "solph.Investment" function is used in the code to represent the investment 
 
 Summary
 -------------
-image of table with nominal performances report WP1
+
 
 .. image:: ./resources/Summary_Converters.PNG
       :width: 140

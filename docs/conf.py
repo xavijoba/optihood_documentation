@@ -34,7 +34,7 @@ autodoc_mock_imports = ["bokeh"]
 master_doc = "index"
 
 github_doc_root = "https://github.com/rtfd/recommonmark/tree/master/doc/"
-
+mathjax_path = "https://cdn.mathjax.org/mathjax/latest/MathJax.js"
 
 def setup(app):
     app.add_config_value(
@@ -70,7 +70,8 @@ author = "...."
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
-extensions = ["sphinx.ext.autodoc", "sphinx.ext.coverage", "sphinx.ext.napoleon", "sphinx.ext.viewcode", "recommonmark"]
+extensions = ["sphinx.ext.autodoc", "sphinx.ext.coverage", "sphinx.ext.napoleon", "sphinx.ext.viewcode", "recommonmark",
+              "sphinx.ext.mathjax"]
 # ,
 #    'rst2pdf.pdfbuilder'
 
