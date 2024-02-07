@@ -10,34 +10,39 @@ except ImportError:
 # EnergyNetworkGroup for grouped optimization
 
 from optihood.energy_network import EnergyNetworkIndiv as EnergyNetwork
-
+from optihood.weather import weather as meteo
 # import plotting methods for Sankey and detailed plots
 
 import optihood.plot_sankey as snk
 import optihood.plot_functions as fnc
 
+print(os.path.abspath(__file__))
+
 if __name__ == '__main__':
 
     # set a time period for the optimization problem
-    timePeriod = pd.date_range("2018-01-01 00:00:00", "2018-01-31 23:00:00", freq="60min")
+    timePeriod = pd.date_range("2005-01-01 00:00:00", "2005-01-03 23:00:00", freq="60min")
 
     # define paths for input and result files
-    inputFilePath = r"..\excels\basic_example"
-    inputfileName = "scenario.xls"
+    inputFilePath = r"..\excels\clustering"
+    inputfileName = "scenario_Annual_4_costs_100%_SH35_last.xls"
 
     resultFilePath =r"..\results"
-    resultFileName ="results.xlsx"
-
+    resultFileName ="results_Annual_4_costs_100%_SH35.xlsx"
+    
+    addr_source=os.path.join(inputFilePath, inputfileName)
+    
+    meteo_data=meteo(source=addr_source)
     # initialize parameters
     numberOfBuildings = 4
-    optimizationType = "costs"  # set as "env" for environmental optimization
+    optimizationType = "env" #"costs"  # set as "env" for environmental optimization
 
     # create an energy network and set the network parameters from an excel file
     network = EnergyNetwork(timePeriod)
     network.setFromExcel(os.path.join(inputFilePath, inputfileName), numberOfBuildings, opt=optimizationType)
 
     # optimize the energy network
-    limit, capacitiesTransformers, capacitiesStorages = network.optimize(solver='gurobi', numberOfBuildings=numberOfBuildings)
+    limit, capacitiesTransformers, capacitiesStorages = network.optimize(solver='cbc', numberOfBuildings=numberOfBuildings)
 
     # print optimization outputs i.e. costs, environmental impact and capacities selected for different components (with investment optimization)
     network.printInvestedCapacities(capacitiesTransformers, capacitiesStorages)

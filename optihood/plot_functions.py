@@ -1179,14 +1179,14 @@ def plot(excelFileName, figureFilePath, numberOfBuildings, plotLevel, plotType, 
 
 if __name__ == '__main__':
 
-    optMode = "group"  # parameter defining whether the results file corresponds to "indiv" or "group" optimization
+    optMode = "Group"  # parameter defining whether the results file corresponds to "indiv" or "group" optimization
     numberOfBuildings = 4
     plotOptim = 1  # defines the number of the optimization to plot
     plotLevel = "allMonths"  # permissible values (for energy balance plot): "allMonths" {for all months}
     # or specific month {"Jan", "Feb", "Mar", etc. three letter abbreviation of the month name}
     # or specific date {format: YYYY-MM-DD}
     plotType = "energy balance"  # permissible values: "energy balance", "bokeh"
-    flowType = "electricity"  # permissible values: "all", "electricity", "space heat", "domestic hot water"
+    flowType = "domestic hot water"  # permissible values: "all", "electricity", "space heat", "domestic hot water"
     plotAnnualHorizontalBar = False  # determines whether the annual horizontal bar is plot or not
 
     plot(os.path.join(r"..\data\Results", f"results{numberOfBuildings}_{plotOptim}_{optMode}.xlsx"), r"..\data\Figures", plotLevel, plotType, flowType, plotAnnualHorizontalBar)
