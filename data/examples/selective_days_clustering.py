@@ -129,6 +129,8 @@ if __name__ == '__main__':
         # plot sankey diagram
         UseLabelDict = True     # a dictionary defining the labels to be used for different flows
         figureFilePath = r"..\figures"
+        if not os.path.exists(figureFilePath):
+            os.makedirs(figureFilePath)
         sankeyFileName = f"Sankey_{numberOfBuildings}_{optimizationType}_ \
             {resultFileName.split(sep='.')[0].split('_')[1]}_{resultFileName.split(sep='.')[0].split('_')[2]}.html"
     
