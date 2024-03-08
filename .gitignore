@@ -8,7 +8,7 @@
 **/.spyproject/
 **/__pycache__/*
 **/*.pyc
-**/*.xls
+#**/*.xls
 **/src/
 
 # Ignore result excel and image files
