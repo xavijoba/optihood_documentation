@@ -21,7 +21,7 @@ if __name__ == '__main__':
     """ file management"""
     # define paths for input and result files
     inputFilePath = r"..\excels\clustering"
-    inputfileName = "scenario_Annual_4_costs_100%_SH35_SPT.xls"
+    inputfileName = "scenario_Annual_4_costs_100%_SH35_SPT_dev.xls"
     # inputfileName = "scenario.xls"
     
     resultFilePath =r"..\results"

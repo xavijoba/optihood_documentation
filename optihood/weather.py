@@ -15,7 +15,7 @@ from shapely.geometry import Point
 import os
 from scipy.cluster import vq
 from xlutils.copy import copy
-
+from optihood.calpinage_dev import Calpinage as cp
 
 class weather:
     """
@@ -91,6 +91,37 @@ class weather:
         else:
             self.solar_file=False
         self.target=worksheet.cell(1, worksheet.row_values(0, start_colx=0, end_colx=None).index('path')).value
+        worksheet = workbook.sheet_by_name('hood')
+        bld_portfolio=worksheet.col_values(0,start_rowx=1,end_rowx=None)
+        for bld in bld_portfolio:
+            """
+            for each building, we compute here the parameters needed to insert
+            the corresponding scenarios of optimized tilt and orientation
+            """
+            bld_azimut=worksheet.cell(
+                bld_portfolio.index(bld)+1,worksheet.row_values(0,start_colx=0, 
+                                     end_colx=None).index('bld_orientation')).value
+            bld_busy=worksheet.cell(
+                bld_portfolio.index(bld)+1,worksheet.row_values(0,start_colx=0, 
+                                     end_colx=None).index('busy_area')).value
+            bld_sside=worksheet.cell(
+                bld_portfolio.index(bld)+1,worksheet.row_values(0,start_colx=0, 
+                                     end_colx=None).index('short_side')).value
+            '''
+            we subtract the busy area as a section of the long side
+            '''
+            bld_lside=worksheet.cell(
+                bld_portfolio.index(bld)+1,worksheet.row_values(0,start_colx=0, 
+                                     end_colx=None).index('long_side')).value-bld_busy/bld_sside
+            bld_lat=worksheet.cell(
+                bld_portfolio.index(bld)+1,worksheet.row_values(0,start_colx=0, 
+                                     end_colx=None).index('latitude')).value
+            bld_long=worksheet.cell(
+                bld_portfolio.index(bld)+1,worksheet.row_values(0,start_colx=0, 
+                                     end_colx=None).index('longitude')).value
+            
+            cp(orientation=bld_azimut,lat=bld_lat,w=1,l=2,W=bld_sside,L=bld_lside,tilt_EW=20,f_EW=False,f_plot=True,f_orient=False,d_rows=0.6)
+        
         worksheet = workbook.sheet_by_name('solar')
         self.lat = float(worksheet.cell(1, worksheet.row_values(0, start_colx=0, end_colx=None).index('latitude')).value)
         self.long = float(worksheet.cell(1, worksheet.row_values(0, start_colx=0, end_colx=None).index('longitude')).value)
