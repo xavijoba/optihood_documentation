@@ -12,6 +12,7 @@ import optihood.plot_sankey as snk
 import optihood.plot_functions as fnc
 
 
+
 if __name__ == '__main__':
 
     # In this example we consider 12 clusters
