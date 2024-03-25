@@ -13,6 +13,7 @@ import numpy as np
 import geopandas
 from shapely.geometry import Point
 import os
+import scipy
 from scipy.cluster import vq
 from xlutils.copy import copy
 from optihood.calpinage_dev import Calpinage as cp
@@ -86,49 +87,189 @@ class weather:
 
         worksheet = workbook.sheet_by_name('profiles')
         self.solar_f_adr = worksheet.cell(3, worksheet.row_values(0, start_colx=0, end_colx=None).index('path')).value
+        self.demand_f_adr = worksheet.cell(2, worksheet.row_values(0, start_colx=0, end_colx=None).index('path')).value
         if self.solar_f_adr!='' or self.solar_f_adr!='PVGIS':
             self.solar_file=True
         else:
             self.solar_file=False
         self.target=worksheet.cell(1, worksheet.row_values(0, start_colx=0, end_colx=None).index('path')).value
+        
+        
+        """
+        Load new sheet, compute centroid of building portfolio
+        and use it for solar radiation data calculations
+        """
         worksheet = workbook.sheet_by_name('hood')
-        bld_portfolio=worksheet.col_values(0,start_rowx=1,end_rowx=None)
-        for bld in bld_portfolio:
-            """
-            for each building, we compute here the parameters needed to insert
-            the corresponding scenarios of optimized tilt and orientation
-            """
-            bld_azimut=worksheet.cell(
-                bld_portfolio.index(bld)+1,worksheet.row_values(0,start_colx=0, 
-                                     end_colx=None).index('bld_orientation')).value
-            bld_busy=worksheet.cell(
-                bld_portfolio.index(bld)+1,worksheet.row_values(0,start_colx=0, 
-                                     end_colx=None).index('busy_area')).value
-            bld_sside=worksheet.cell(
-                bld_portfolio.index(bld)+1,worksheet.row_values(0,start_colx=0, 
-                                     end_colx=None).index('short_side')).value
-            '''
-            we subtract the busy area as a section of the long side
-            '''
-            bld_lside=worksheet.cell(
-                bld_portfolio.index(bld)+1,worksheet.row_values(0,start_colx=0, 
-                                     end_colx=None).index('long_side')).value-bld_busy/bld_sside
-            bld_lat=worksheet.cell(
-                bld_portfolio.index(bld)+1,worksheet.row_values(0,start_colx=0, 
-                                     end_colx=None).index('latitude')).value
-            bld_long=worksheet.cell(
-                bld_portfolio.index(bld)+1,worksheet.row_values(0,start_colx=0, 
-                                     end_colx=None).index('longitude')).value
-            
-            cp(orientation=bld_azimut,lat=bld_lat,w=1,l=2,W=bld_sside,L=bld_lside,tilt_EW=20,f_EW=False,f_plot=True,f_orient=False,d_rows=0.6)
+        
+        self.set_solar_scenarios(worksheet)
         
         worksheet = workbook.sheet_by_name('solar')
-        self.lat = float(worksheet.cell(1, worksheet.row_values(0, start_colx=0, end_colx=None).index('latitude')).value)
-        self.long = float(worksheet.cell(1, worksheet.row_values(0, start_colx=0, end_colx=None).index('longitude')).value)
         self.tilt = float(worksheet.cell(1, worksheet.row_values(0, start_colx=0, end_colx=None).index('tilt')).value)
         self.az = float(worksheet.cell(1, worksheet.row_values(0, start_colx=0, end_colx=None).index('azimuth')).value)
         return None
+    
+    def load_bld_demand(self,bld_name):
+        source=self.demand_f_adr + r"\Building2"+str(bld_name)+".csv"
+        demand=pd.read_csv(source,sep=";")
         
+        return demand
+        
+    
+    def set_solar_scenarios(self,worksheet):
+            """
+            Method to set the solar scenarios with optimized azimuth and tilt 
+            """
+            df_columns=worksheet.row_values(0,start_colx=0,end_colx=None)
+            df=pd.DataFrame(columns=df_columns)
+            i=0
+            for i in range(len(df_columns)):
+                df[df_columns[i]]=worksheet.col_values(i,start_rowx=1,end_rowx=None)
+            
+            geometry=geopandas.GeoSeries(geopandas.points_from_xy(df.loc[:,'longitude'], 
+                                                                  df.loc[:,'latitude']))
+            self.lat=geometry.unary_union.centroid.y
+            self.long=geometry.unary_union.centroid.x
+            
+            '''
+            we subtract the busy area as a section of the long side
+            '''
+            df.loc[:,'long_side']=df.loc[:,'long_side']-df.loc[:,'busy_area']/df.loc[:,'short_side']
+            df.loc[:,'roof_area']=df.loc[:,'long_side']*df.loc[:,'short_side']
+            """
+            once the building geometry is defined, the class Calpinage can 
+            be called to compute the roof coverage ratio, the number of solar panels
+            and the total receiving surface for each optimization scenario for 
+            orientation: same of building on short side
+                        same of buidlgin on long side
+                        full south (180° according to used convention)
+            and structure:  portait, with optimal tilt for each case as computed by PVlib
+                            East West (EW) with fixed tilt of 20°
+            """
+            df['P_Coverage_90']=0
+            df['P_Coverage_0']=0
+            df['P_Coverage_S']=0
+            df['EW_Coverage_90']=0
+            df['EW_Coverage_0']=0
+            df['EW_Coverage_S']=0
+            df['P_PanelN_90']=0
+            df['P_PanelN_0']=0
+            df['P_PanelN_S']=0
+            df['EW_PanelN_90']=0
+            df['EW_PanelN_0']=0
+            df['EW_PanelN_S']=0
+            df['P_Tilt_90']=0
+            df['P_Tilt_0']=0
+            df['P_Tilt_S']=0            
+            df['EW_Tilt_90']=0
+            df['EW_Tilt_0']=0
+            df['EW_Tilt_S']=0
+            df['P_Az_90']=0
+            df['P_Az_0']=0
+            df['P_Az_S']=0
+            df['EW_Az_90']=0
+            df['EW_Az_0']=0
+            df['EW_Az_S']=0
+            #for each single building do this:
+            for bld in df.index:    
+                ### method to acquire buiding hourly thermal and electricity demand
+                ### gets a DF with columns=['elec_demand','thermal_demad']
+                ### and values normalized on annual sum
+                demand=self.load_bld_demand(bld)
+                #### method
+                
+                # case 1: portait parallel to building on long side, short side and
+                #         facing South
+                #           PVGIS optimal tilt
+                #           (minimum interdistance is 0.6m)
+                roof=cp(orientation=float(df.loc[bld,'bld_orientation']),
+                   lat=float(df.loc[bld,'latitude']),
+                   long=float(df.loc[bld,'longitude']),
+                   w=1,l=2,
+                   W=float(df.loc[bld,'short_side']),
+                   L=float(df.loc[bld,'long_side']),
+                   tilt_EW=20,f_EW=False,
+                   f_plot=False,
+                   d_rows=0.6)
+                df.loc[bld,'P_Coverage_90']=roof.roof.loc[0,'ratio']
+                df.loc[bld,'P_Coverage_0']=roof.roof.loc[1,'ratio']
+                df.loc[bld,'P_Coverage_S']=roof.roof.loc[2,'ratio']
+                df.loc[bld,'P_Tilt_90']=roof.roof.loc[0,'tilt']
+                df.loc[bld,'P_Tilt_0']=roof.roof.loc[1,'tilt']
+                df.loc[bld,'P_Tilt_S']=roof.roof.loc[2,'tilt']
+                df.loc[bld,'P_Az_90']=roof.roof.loc[0,'azimut']
+                df.loc[bld,'P_Az_0']=roof.roof.loc[1,'azimut']
+                df.loc[bld,'P_Az_S']=roof.roof.loc[2,'azimut']
+                # case 2: portait parallel to building on long side, short side and
+                #         facing South
+                #           optimal tilt based on demand
+                
+                self.optimize_tilt(orient=df.loc[bld,'P_Az_90'],
+                                   demand=demand['electricityDemand'],
+                                   lat=float(df.loc[bld,'latitude']),
+                                   long=float(df.loc[bld,'longitude']),
+                                   tilt=df.loc[bld,'P_Tilt_90'])
+                #           (minimum interdistance is 0.6m)
+                # case 2: EW parallel to building on long side, short side and
+                #         facing South
+                #            PVGIS optimal tilt
+                #           (minimum interdistance is 0.6m)
+                
+                roof=cp(orientation=float(df.loc[bld,'bld_orientation']),
+                   lat=float(df.loc[bld,'latitude']),
+                   long=float(df.loc[bld,'longitude']),
+                   w=1,l=2,
+                   W=float(df.loc[bld,'short_side']),
+                   L=float(df.loc[bld,'long_side']),
+                   tilt_EW=20,f_EW=True,
+                   f_plot=True,
+                   d_rows=0.6)
+                df.loc[bld,'EW_Coverage_90']=roof.roof.loc[0,'ratio']
+                df.loc[bld,'EW_Coverage_0']=roof.roof.loc[1,'ratio']
+                df.loc[bld,'EW_Coverage_S']=roof.roof.loc[2,'ratio']
+                df.loc[bld,'EW_Tilt_90']=roof.roof.loc[0,'tilt']
+                df.loc[bld,'EW_Tilt_0']=roof.roof.loc[1,'tilt']
+                df.loc[bld,'EW_Tilt_S']=roof.roof.loc[2,'tilt']
+                df.loc[bld,'EW_Az_90']=roof.roof.loc[0,'azimut']
+                df.loc[bld,'EW_Az_0']=roof.roof.loc[1,'azimut']
+                df.loc[bld,'EW_Az_S']=roof.roof.loc[2,'azimut']
+            self.solar_scen=df
+
+            return None
+    def optimize_tilt(self,orient=0,
+                          demand=None,
+                          lat=42,
+                          long=6,
+                          tilt=0):
+        def loss(x,lat,long,orient):
+            PVGIS_data = pvlib.iotools.get_pvgis_hourly(lat, long,components=False,
+                                                    surface_azimuth=orient,
+                                                    start=2016,
+                                                    end=2016,
+                                                    surface_tilt=x,
+                                                    optimal_surface_tilt=False,
+                                                    optimalangles=False,
+                                                    map_variables=True)
+            normal_irr_profile=PVGIS_data[0].poa_global/PVGIS_data[0].poa_global.sum()
+            normal_irr_profile=normal_irr_profile.iloc[:demand.index.size].reset_index(drop=True)
+            normal_demand_profile=demand/demand.sum()
+            normal_coverage_profile=normal_demand_profile
+            for cov in normal_coverage_profile.index:
+                if normal_irr_profile.loc[cov]>normal_demand_profile.loc[cov]:
+                    normal_coverage_profile.loc[cov]=normal_demand_profile.loc[cov]
+                else:
+                    normal_coverage_profile.loc[cov]=normal_irr_profile.loc[cov]
+            irr_cov_sum=normal_coverage_profile.sum()
+            return irr_cov_sum
+        # args=
+        x_bounds = (tilt, 90)
+        results_df=pd.DataFrame(columns=['tilt','diff'])
+        for x in range(tilt,80,10):
+            results_df.loc[results_df.index.size,'diff']=loss(x,lat,long,orient)
+            results_df.loc[results_df.index.size-1,'tilt']=x
+        
+        optimal_x = results_df.tilt[0]
+        
+                
     def get_TMY(self):
         """
         Method to request TMY data from PVGIS or load data from file 

@@ -13,6 +13,7 @@ from shapely import affinity
 import numpy as np
 import pandas as pd
 import math
+import pvlib
 
 class Calpinage:
     """class to compute the number of panels that can be fit
@@ -21,7 +22,7 @@ class Calpinage:
     180° is South, 270° is West and 360° is nord. Orentations < 90° and > 270°
     are solved by mirroring the building orientation at 180° , so that orientations are from East to West only.
     """
-    def __init__(self,orientation=180,lat=42.6,tilt=20, W=10,L=10,w=1,l=2.05,d_W=0.5,d_L=0.5,tilt_EW=20,f_EW=False,f_plot=False,f_orient=True,d_rows=0.6):
+    def __init__(self,orientation=180,lat=42.6,long=6,tilt=20, W=10,L=10,w=1,l=2.05,d_W=0.5,d_L=0.5,tilt_EW=20,f_EW=False,f_plot=False,d_rows=0.6):
         """ Orientation is the building orientation in degrees
             lat is the roof middle latitude
             W is the roof width in [m]
@@ -36,11 +37,12 @@ class Calpinage:
         self.W=W
         self.L=L
         self.lat=lat
+        self.long=long
         self.w=w
         self.l=l
         self.d_W=d_W
         self.d_L=d_L
-        self.tilt=tilt
+        # self.tilt=tilt
         self.tilt_EW=tilt_EW
         self.d_rows_min=d_rows
         self.off_pnl=0.07
@@ -49,30 +51,49 @@ class Calpinage:
         self.azimut=180
         self.f_EW=f_EW
         self.f_plot=f_plot
-        self.f_orient=f_orient
-        self.fit_panel()
+
+        self.fit_panel(tilt)
         
         return None
 
-    def fit_panel(self):
+    def fit_panel(self,tilt):
         """
         Method to fit the reference collector to the availabe roof 
         based on orientation and tilt options.
         
         """
-        self.rows=pd.DataFrame(columns=['edge_south','edge_north','row_surf','N_panel'])
-        self.roof=pd.DataFrame(columns=['N_panel','ratio'])
+        
+        self.roof=pd.DataFrame(columns=['N_panel','ratio','tilt','azimut'])
         if self.orientation < 90 or self.orientation > 270:
                 self.orientation = self.orientation + 180
                 if self.orientation > 360 :
                     self.orientation=self.orientation-360
-        if self.f_orient==False:
-            orient_diff=[90,0]
+        # if self.f_orient==False:
+        #     orient_diff=[90,0]
+        # else:
+        #orient diff convention is 0°South, 90°West, -90°Est
+        self.conv_orient=self.orientation-self.azimut
+        if self.conv_orient>0:
+            orient_diff= [-90,0,-self.conv_orient] 
         else:
-            orient_diff= [self.orientation-self.azimut]        
+            orient_diff= [90,0,-self.conv_orient] 
         B = box(0.0, 0.0, self.L, self.W)
         B1 = box(self.d_L, self.d_W, self.L-self.d_L, self.W-self.d_W)
         for teta in orient_diff:
+            self.rows=pd.DataFrame(columns=['edge_south','edge_north','row_surf','N_panel'])
+            print(teta)
+            if self.f_EW!=True:
+                PVGIS_data = pvlib.iotools.get_pvgis_hourly(self.lat, self.long,components=False,
+                                                        surface_azimuth=teta+self.conv_orient,
+                                                        start=2016,
+                                                        end=2016,
+                                                        optimal_surface_tilt=True,
+                                                        optimalangles=False,
+                                                        map_variables=True)
+                self.tilt=PVGIS_data[1]['mounting_system']['fixed']['slope']['value']
+            else:
+                self.tilt=tilt
+            
             if self.f_EW==True:
                 self.w_loop=2*self.w*math.cos(math.radians(self.tilt_EW))+self.off_pnl
                 # self.off_row=np.max([self.w*np.sin(np.radians(self.tilt_EW))*1/np.tan(np.radians(self.W_S_A)),self.d_rows_min])
@@ -181,7 +202,9 @@ class Calpinage:
                         plt.show()
                     self.roof.loc[self.roof.index.size,'N_panel']=self.rows.loc[self.rows.index[-i]:,'N_panel'].sum()*2
                     self.roof.loc[self.roof.index.size-1,'ratio']=self.roof.loc[self.roof.index.size-1,'N_panel']*self.l*self.w/B1.area
-            
+                    self.roof.loc[self.roof.index.size-1,'tilt']=self.tilt
+                    self.roof.loc[self.roof.index.size-1,'azimut']=teta+self.conv_orient
+                    
                 elif teta<0:
                     b1 = box(B1.bounds[2]-self.l, B1.bounds[1], 
                              B1.bounds[2], B1.bounds[1]+self.w_loop)
@@ -273,7 +296,9 @@ class Calpinage:
                         plt.show()
                     self.roof.loc[self.roof.index.size,'N_panel']=self.rows.loc[self.rows.index[-i-1]:,'N_panel'].sum()*2
                     self.roof.loc[self.roof.index.size-1,'ratio']=self.roof.loc[self.roof.index.size-1,'N_panel']*self.l*self.w/B1.area
-                
+                    self.roof.loc[self.roof.index.size-1,'tilt']=self.tilt
+                    self.roof.loc[self.roof.index.size-1,'azimut']=teta+self.conv_orient
+                    
                 elif teta>0:
                     b1 = box(B1.bounds[0], B1.bounds[1], 
                              B1.bounds[0]+self.l, B1.bounds[1]+self.w_loop)
@@ -365,7 +390,9 @@ class Calpinage:
                         plt.show()
                     self.roof.loc[self.roof.index.size,'N_panel']=self.rows.loc[self.rows.index[-i-1]:,'N_panel'].sum()*2
                     self.roof.loc[self.roof.index.size-1,'ratio']=self.roof.loc[self.roof.index.size-1,'N_panel']*self.l*self.w/B1.area
-                
+                    self.roof.loc[self.roof.index.size-1,'tilt']=self.tilt
+                    self.roof.loc[self.roof.index.size-1,'azimut']=teta+self.conv_orient
+                    
                 
             else:
                 off_row=np.max([self.w*math.sin(math.radians(self.tilt))*1/np.tan(math.radians(self.W_S_A)),self.d_rows_min])
@@ -476,7 +503,8 @@ class Calpinage:
                         plt.show()
                     self.roof.loc[self.roof.index.size,'N_panel']=self.rows.N_panel.sum()
                     self.roof.loc[self.roof.index.size-1,'ratio']=self.roof.loc[self.roof.index.size-1,'N_panel']*self.l*self.w/B1.area
-            
+                    self.roof.loc[self.roof.index.size-1,'tilt']=self.tilt
+                    self.roof.loc[self.roof.index.size-1,'azimut']=teta+self.conv_orient
                 elif teta < 0:
                     b1 = box(B1.bounds[2]-self.l, B1.bounds[1], 
                              B1.bounds[2], B1.bounds[1]+self.w*math.cos(math.radians(self.tilt)))
@@ -570,6 +598,9 @@ class Calpinage:
                         plt.show()
                     self.roof.loc[self.roof.index.size,'N_panel']=self.rows.N_panel.sum()
                     self.roof.loc[self.roof.index.size-1,'ratio']=self.roof.loc[self.roof.index.size-1,'N_panel']*self.l*self.w/B1.area
+                    self.roof.loc[self.roof.index.size-1,'tilt']=self.tilt
+                    self.roof.loc[self.roof.index.size-1,'azimut']=teta+self.conv_orient
+                    
                 elif teta>0:
                     
                     b1 = box(B1.bounds[0], B1.bounds[1], 
@@ -646,7 +677,10 @@ class Calpinage:
                         plt.show()
                     self.roof.loc[self.roof.index.size,'N_panel']=self.rows.N_panel.sum()
                     self.roof.loc[self.roof.index.size-1,'ratio']=self.roof.loc[self.roof.index.size-1,'N_panel']*self.l*self.w/B1.area
-                return None
+                    self.roof.loc[self.roof.index.size-1,'tilt']=self.tilt
+                    self.roof.loc[self.roof.index.size-1,'azimut']=teta+self.azimut
+                    
+        return None
             
         
 if __name__ == "__main__":   
@@ -654,7 +688,7 @@ if __name__ == "__main__":
         for L,W in [[50,20]]:
             for tilt in [20,30,40]:
                 try: 
-                    meteo=Calpinage(orientation=item,lat=47.39,w=1,l=2,W=W,L=L,tilt_EW=tilt,f_EW=False,f_plot=True,f_orient=False,d_rows=0.6)
+                    meteo=Calpinage(orientation=item,lat=47.39,w=1,l=2,W=W,L=L,tilt_EW=tilt,f_EW=False,f_plot=True,d_rows=0.6)
                     row=meteo.rows
                     roof=meteo.roof
                     print(item)
