@@ -25,7 +25,11 @@ class Calpinage_light:
     def __init__(self,orientation=180,lat=42.6,long=6,tilt=20, 
                  W=10,L=10,w=1,l=2.05,d_W=0.5,d_L=0.5,
                  tilt_EW=20,f_EW=False,f_plot=False,d_rows=0.6,
-                 parallel="long",optimal=False,demand=None,irradiance=None):
+                 parallel="long",optimal="tilt",
+                 tecno='PV',
+                 elec_demand=None,
+                 heat_demand=None,
+                 irradiance=None):
         """ Orientation is the building orientation in degrees
             lat is the roof middle latitude
             W is the roof width in [m]
@@ -37,6 +41,7 @@ class Calpinage_light:
             tilt is the panel inclination wrt to the horizontal in degrees
             parallel can be "long", "short" or "South" for collectors alignment along
             the long or short side of the building or towards South
+            optimal: "tilt", "max4dist"
         """
         self.orientation=orientation
         self.azimut=180
@@ -58,7 +63,9 @@ class Calpinage_light:
         
         self.f_EW=f_EW
         self.f_plot=f_plot
-        self.demand=demand
+        self.tecno=tecno
+        self.heat_demand=heat_demand
+        self.elec_demand=elec_demand
         self.ghi=irradiance[0]
         self.dhi=irradiance[1]
         self.dni=irradiance[2]
@@ -79,7 +86,12 @@ class Calpinage_light:
                                 solar_zenith=solar_position['apparent_zenith'],
                                 solar_azimuth=solar_position['azimuth'])
         self.poa_irradiance=POA_irradiance['poa_global']
-        self.production=self.poa_irradiance*self.roof.iloc[-1,1]
+        
+        self.production=self.poa_irradiance*(
+            self.roof.loc[self.roof.index[0],'ratio']*self.L*self.W)
+        self.production.reset_index(inplace=True,drop=True)
+        self.annual_prod=self.production.sum()
+        self.coverage=self.production-self.demand
         return None
     
     def fit_panel(self,tilt,parallel):
@@ -115,7 +127,7 @@ class Calpinage_light:
   
         self.rows=pd.DataFrame(columns=['edge_south','edge_north','row_surf','N_panel'])
         print(self.teta)
-        if self.f_EW!=True and self.optimal==True:
+        if self.f_EW!=True and self.optimal=="tilt":
             PVGIS_data = pvlib.iotools.get_pvgis_hourly(self.lat, self.long,components=False,
                                                     surface_azimuth=self.teta+self.conv_orient,
                                                     start=2016,
@@ -124,7 +136,12 @@ class Calpinage_light:
                                                     optimalangles=False,
                                                     map_variables=True)
             self.tilt=PVGIS_data[1]['mounting_system']['fixed']['slope']['value']
-        else:
+        elif self.f_EW!=True and self.optimal=="max4dist":
+            # compute tilt of collector that implies a row distance 
+            # equal to the minimal
+            self.tilt=math.floor(math.asin(self.d_rows_min/self.l*math.tan(
+                self.W_S_A/180*3.14))*180/3.14)
+        else:                
             self.tilt=tilt
         
         if self.f_EW==True:

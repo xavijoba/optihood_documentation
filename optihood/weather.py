@@ -120,9 +120,32 @@ class weather:
         self.W_S_A=np.abs(self.lat+self.W_S_D)
         # self.set_solar_scenarios()
         
-        # worksheet = workbook.sheet_by_name('solar')
-        # self.tilt = float(worksheet.cell(1, worksheet.row_values(0, start_colx=0, end_colx=None).index('tilt')).value)
-        # self.az = float(worksheet.cell(1, worksheet.row_values(0, start_colx=0, end_colx=None).index('azimuth')).value)
+        
+        worksheet = workbook.sheet_by_name('solar_technology')
+        tecno_df_columns=worksheet.row_values(0,start_colx=0,end_colx=None)
+        self.df_tecno=pd.DataFrame(columns=df_columns)
+        i=0
+        for i in range(len(tecno_df_columns)):
+            self.df_tecno[tecno_df_columns[i]]=worksheet.col_values(i,start_rowx=1,end_rowx=None)
+        
+        
+        self.tecno_list = worksheet.col_values(0,start_rowx=1,end_rowx=None)
+        # self.PV_eff = float(worksheet.cell(worksheet.col_values(0, start_rowx=0, end_rowx=None).index('pv'), 
+        #                                    worksheet.row_values(0, start_colx=0, end_colx=None).index('efficiency')).value)
+        # self.ST_eta0= float(worksheet.cell(worksheet.col_values(0, start_rowx=0, end_rowx=None).index('solarCollector'), 
+        #                                    worksheet.row_values(0, start_colx=0, end_colx=None).index('eta_0')).value)
+        # self.ST_a1= float(worksheet.cell(worksheet.col_values(0, start_rowx=0, end_rowx=None).index('solarCollector'), 
+        #                                    worksheet.row_values(0, start_colx=0, end_colx=None).index('a_1')).value)
+        # self.ST_a2= float(worksheet.cell(worksheet.col_values(0, start_rowx=0, end_rowx=None).index('solarCollector'), 
+        #                                    worksheet.row_values(0, start_colx=0, end_colx=None).index('a_2')).value)
+        # self.PVT_eff=float(worksheet.cell(worksheet.col_values(0, start_rowx=0, end_rowx=None).index('pv'), 
+        #                                    worksheet.row_values(0, start_colx=0, end_colx=None).index('efficiency')).value)
+        # self.PVT_eta0= float(worksheet.cell(worksheet.col_values(0, start_rowx=0, end_rowx=None).index('pvt'), 
+        #                                    worksheet.row_values(0, start_colx=0, end_colx=None).index('eta_0')).value)
+        # self.PVT_a1= float(worksheet.cell(worksheet.col_values(0, start_rowx=0, end_rowx=None).index('pvt'), 
+        #                                    worksheet.row_values(0, start_colx=0, end_colx=None).index('a_1')).value)
+        # self.PVT_a2= float(worksheet.cell(worksheet.col_values(0, start_rowx=0, end_rowx=None).index('pvt'), 
+        #                                    worksheet.row_values(0, start_colx=0, end_colx=None).index('a_2')).value)
         return None
     
     def load_bld_demand(self,bld_name):
@@ -204,10 +227,23 @@ class weather:
                 ### method to acquire buiding hourly thermal and electricity demand
                 ### gets a DF with columns=['elec_demand','thermal_demad']
                 ### and values normalized on annual sum
-                demand=self.load_bld_demand(bld)
-                #### method
-
                 
+                #### method
+                heat_demand=self.load_bld_demand(bld).loc[
+                    :,'spaceHeatingDemand']+self.load_bld_demand(
+                        bld).loc[:,'domesticHotWaterDemand']
+                elec_demand=self.load_bld_demand(bld).loc[:,'electricityDemand']
+                tecno_PV=self.df_hood.loc[bld,'PV']
+                tecno_ST=self.df_hood.loc[bld,'ST']
+                tecno_PVT=self.df_hood.loc[bld,'PVT']
+                tecno=[tecno_PV, tecno_ST, tecno_PVT]
+                for i in range(3):
+                    if i==0 and tecno[i]==1:
+                        demand=elec_demand
+                    elif i==1 and tecno[i]==1:
+                        demand=heat_demand
+                    elif i==2 and tecno[i]==1:
+                        demand
                 
                 # case 1: portait parallel to building on short side
                 #         PVGIS optimal tilt
@@ -222,7 +258,11 @@ class weather:
                    f_plot=False,
                    d_rows=0.6,
                    parallel="short",optimal=True,
-                   demand=demand.iloc[:,1],irradiance=[self.irr_TMY.ghi,self.irr_TMY.dhi,self.irr_TMY.dni])
+                   # demand=demand.iloc[:,1],#"electricityDemand","spaceHeatingDemand","domesticHotWaterDemand"
+                   elec_demand=elec_demand,
+                   heat_demand=heat_demand,
+                   tecno="PV",
+                   irradiance=[self.irr_TMY.ghi,self.irr_TMY.dhi,self.irr_TMY.dni])
                 
                 self.solar_cases.loc[
                     self.solar_cases.index.size]=[bld,
