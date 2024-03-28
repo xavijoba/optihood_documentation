@@ -123,7 +123,7 @@ class weather:
         
         worksheet = workbook.sheet_by_name('solar_technology')
         tecno_df_columns=worksheet.row_values(0,start_colx=0,end_colx=None)
-        self.df_tecno=pd.DataFrame(columns=df_columns)
+        self.df_tecno=pd.DataFrame(columns=tecno_df_columns)
         i=0
         for i in range(len(tecno_df_columns)):
             self.df_tecno[tecno_df_columns[i]]=worksheet.col_values(i,start_rowx=1,end_rowx=None)
@@ -192,36 +192,19 @@ class weather:
             and structure:  portait, with optimal tilt for each case as computed by PVlib
                             East West (EW) with fixed tilt of 20°
             """
-            # df['P_Coverage_90']=0
-            # df['P_Coverage_0']=0
-            # df['P_Coverage_S']=0
-            # df['EW_Coverage_90']=0
-            # df['EW_Coverage_0']=0
-            # df['EW_Coverage_S']=0
-            # df['P_PanelN_90']=0
-            # df['P_PanelN_0']=0
-            # df['P_PanelN_S']=0
-            # df['EW_PanelN_90']=0
-            # df['EW_PanelN_0']=0
-            # df['EW_PanelN_S']=0
-            # df['P_Tilt_90']=0
-            # df['P_Tilt_0']=0
-            # df['P_Tilt_S']=0            
-            # df['EW_Tilt_90']=0
-            # df['EW_Tilt_0']=0
-            # df['EW_Tilt_S']=0
-            # df['P_Az_90']=0
-            # df['P_Az_0']=0
-            # df['P_Az_S']=0
-            # df['EW_Az_90']=0
-            # df['EW_Az_0']=0
-            # df['EW_Az_S']=0
-            #for each single building do this:
+          
+            
             self.solar_cases=pd.DataFrame(
-                columns=['bld_name','latitude','longitude',
+                columns=['bld_name','Techno','latitude','longitude',
                         'bld_azimut','cll_azimut','tilt',
-                        'row_dist','N_panel','ratio','cll_layout',
-                        'cll_alignment','demand_coverage']
+                        'row_dist','N_panel','ratio',
+                        'cll_layout',
+                        'cll_alignment',
+                        'Optimal tilt or max4dist',
+                        'el cover ratio',
+                        'el coverage','el production','el demand',
+                        'th cover ratio',
+                        'th coverage','th production','th demand']
                 )
             for bld in self.df_hood.index:    
                 ### method to acquire buiding hourly thermal and electricity demand
@@ -236,111 +219,69 @@ class weather:
                 tecno_PV=self.df_hood.loc[bld,'PV']
                 tecno_ST=self.df_hood.loc[bld,'ST']
                 tecno_PVT=self.df_hood.loc[bld,'PVT']
-                tecno=[tecno_PV, tecno_ST, tecno_PVT]
-                for i in range(3):
-                    if i==0 and tecno[i]==1:
-                        demand=elec_demand
-                    elif i==1 and tecno[i]==1:
-                        demand=heat_demand
-                    elif i==2 and tecno[i]==1:
-                        demand
-                
-                # case 1: portait parallel to building on short side
-                #         PVGIS optimal tilt
-                #         minimum interdistance is 0.6m
-                roof_short_opt=cp(orientation=float(self.df_hood.loc[bld,'bld_orientation']),
-                   lat=float(self.df_hood.loc[bld,'latitude']),
-                   long=float(self.df_hood.loc[bld,'longitude']),
-                   w=1,l=2,
-                   W=float(self.df_hood.loc[bld,'short_side']),
-                   L=float(self.df_hood.loc[bld,'long_side']),
-                   tilt_EW=20,f_EW=False,
-                   f_plot=False,
-                   d_rows=0.6,
-                   parallel="short",optimal=True,
-                   # demand=demand.iloc[:,1],#"electricityDemand","spaceHeatingDemand","domesticHotWaterDemand"
-                   elec_demand=elec_demand,
-                   heat_demand=heat_demand,
-                   tecno="PV",
-                   irradiance=[self.irr_TMY.ghi,self.irr_TMY.dhi,self.irr_TMY.dni])
-                
-                self.solar_cases.loc[
-                    self.solar_cases.index.size]=[bld,
-                                                  float(self.df_hood.loc[bld,'latitude']),
-                                                  float(self.df_hood.loc[bld,'longitude']),
-                                                  float(self.df_hood.loc[bld,'bld_orientation']),
-                                                  roof_short_opt.roof[0,'cll_azimut'],
-                                                  roof_short_opt.roof[0,'tilt'],
-                                                  roof_short_opt.roof[0,'row_dist'],
-                                                  roof_short_opt.roof[0,'N_panel'],
-                                                  roof_short_opt.roof[0,'ratio'],
-                                                  roof_short_opt.roof[0,'f_EW'],
-                                                  "short","demand_cover"
-                                                  ]
-                
-                # case 2: portait parallel to building on long side
-                #         PVGIS optimal tilt
-                #         minimum interdistance is 0.6m
-                roof_long_opt=cp(orientation=float(self.df_hood.loc[bld,'bld_orientation']),
-                   lat=float(self.df_hood.loc[bld,'latitude']),
-                   long=float(self.df_hood.loc[bld,'longitude']),
-                   w=1,l=2,
-                   W=float(self.df_hood.loc[bld,'short_side']),
-                   L=float(self.df_hood.loc[bld,'long_side']),
-                   tilt_EW=20,f_EW=False,
-                   f_plot=False,
-                   d_rows=0.6,
-                   parallel="long",optimal=True,
-                   demand=demand.iloc[:,1],irradiance=[self.irr_TMY.ghi,self.irr_TMY.dhi])
-                
-                self.solar_cases.loc[self.solar_cases.index.size,]
-                
-                
-                
-                df.loc[bld,'P_Coverage_90']=roof.roof.loc[0,'ratio']
-                df.loc[bld,'P_Coverage_0']=roof.roof.loc[1,'ratio']
-                df.loc[bld,'P_Coverage_S']=roof.roof.loc[2,'ratio']
-                df.loc[bld,'P_Tilt_90']=roof.roof.loc[0,'tilt']
-                df.loc[bld,'P_Tilt_0']=roof.roof.loc[1,'tilt']
-                df.loc[bld,'P_Tilt_S']=roof.roof.loc[2,'tilt']
-                df.loc[bld,'P_Az_90']=roof.roof.loc[0,'azimut']
-                df.loc[bld,'P_Az_0']=roof.roof.loc[1,'azimut']
-                df.loc[bld,'P_Az_S']=roof.roof.loc[2,'azimut']
-                # case 2: portait parallel to building on long side, short side and
-                #         facing South
-                #           optimal tilt based on demand
-                
-                self.optimize_tilt(orient=df.loc[bld,'P_Az_90'],
-                                   demand=demand['electricityDemand'],
-                                   lat=float(df.loc[bld,'latitude']),
-                                   long=float(df.loc[bld,'longitude']),
-                                   tilt=df.loc[bld,'P_Tilt_90'])
-                #           (minimum interdistance is 0.6m)
-                # case 2: EW parallel to building on long side, short side and
-                #         facing South
-                #            PVGIS optimal tilt
-                #           (minimum interdistance is 0.6m)
-                
-                roof=cp(orientation=float(df.loc[bld,'bld_orientation']),
-                   lat=float(df.loc[bld,'latitude']),
-                   long=float(df.loc[bld,'longitude']),
-                   w=1,l=2,
-                   W=float(df.loc[bld,'short_side']),
-                   L=float(df.loc[bld,'long_side']),
-                   tilt_EW=20,f_EW=True,
-                   f_plot=True,
-                   d_rows=0.6)
-                df.loc[bld,'EW_Coverage_90']=roof.roof.loc[0,'ratio']
-                df.loc[bld,'EW_Coverage_0']=roof.roof.loc[1,'ratio']
-                df.loc[bld,'EW_Coverage_S']=roof.roof.loc[2,'ratio']
-                df.loc[bld,'EW_Tilt_90']=roof.roof.loc[0,'tilt']
-                df.loc[bld,'EW_Tilt_0']=roof.roof.loc[1,'tilt']
-                df.loc[bld,'EW_Tilt_S']=roof.roof.loc[2,'tilt']
-                df.loc[bld,'EW_Az_90']=roof.roof.loc[0,'azimut']
-                df.loc[bld,'EW_Az_0']=roof.roof.loc[1,'azimut']
-                df.loc[bld,'EW_Az_S']=roof.roof.loc[2,'azimut']
-            self.solar_scen=df
-
+                tecno_flag=[tecno_PV, tecno_ST, tecno_PVT]
+                tecno_list=['PV', 'ST', 'PVT']
+                layout_list=['portrait','est-west']
+                arrangement_list=['short','long','south']
+                opt_type=['tilt','max4dist']
+                for opt in opt_type:
+                    
+                    for arr in arrangement_list:
+                        for lay in layout_list:
+                            if lay=="portrait":
+                                f_EW=False
+                            else:
+                                f_EW=True
+                            for i in range(3):
+                                if tecno_flag[i]==1:
+                            
+                                # case 1: portait parallel to building on short side
+                                #         PVGIS optimal tilt
+                                #         minimum interdistance is 0.6m
+                                    roof_short_opt=cp(orientation=float(self.df_hood.loc[bld,'bld_orientation']),
+                                       lat=float(self.df_hood.loc[bld,'latitude']),
+                                       long=float(self.df_hood.loc[bld,'longitude']),
+                                       w=1,l=2,
+                                       W=float(self.df_hood.loc[bld,'short_side']),
+                                       L=float(self.df_hood.loc[bld,'long_side']),
+                                       tilt_EW=20,f_EW=False,
+                                       f_plot=False,
+                                       d_rows=0.6,
+                                       parallel=arr,optimal=opt,
+                                       # demand=demand.iloc[:,1],#"electricityDemand","spaceHeatingDemand","domesticHotWaterDemand"
+                                       elec_demand=elec_demand,
+                                       heat_demand=heat_demand,
+                                       tecno=tecno_list[i],
+                                       irradiance=[self.irr_TMY.ghi,self.irr_TMY.dhi,self.irr_TMY.dni,self.irr_TMY.temp_air],
+                                       tecno_df=self.df_tecno)
+                                    print('end')
+                                    
+                                    self.solar_cases.loc[
+                                        self.solar_cases.index.size]=[bld,
+                                                                      tecno_list[i],
+                                                                      float(self.df_hood.loc[bld,'latitude']),
+                                                                      float(self.df_hood.loc[bld,'longitude']),
+                                                                      float(self.df_hood.loc[bld,'bld_orientation']),
+                                                                      float(roof_short_opt.roof.loc[0,'cll_azimut']),
+                                                                      float(roof_short_opt.roof.loc[0,'tilt']),
+                                                                      float(roof_short_opt.roof.loc[0,'row_dist']),
+                                                                      float(roof_short_opt.roof.loc[0,'N_panel']),
+                                                                      float(roof_short_opt.roof.loc[0,'ratio']),
+                                                                      lay,
+                                                                      arr,
+                                                                      opt,
+                                                                      float(roof_short_opt.cover_ratio_el),
+                                                                      float(roof_short_opt.annual_cov_el),
+                                                                      float(roof_short_opt.annual_prod_el),
+                                                                      float(roof_short_opt.elec_demand.sum()),
+                                                                      float(roof_short_opt.cover_ratio_th),
+                                                                      float(roof_short_opt.annual_cov_th),
+                                                                      float(roof_short_opt.annual_prod_th),
+                                                                      float(roof_short_opt.heat_demand.sum())
+                                                                      
+                                                                      ]
+                          
+    
             return None
     def optimize_tilt(self,orient=0,
                           demand=None,

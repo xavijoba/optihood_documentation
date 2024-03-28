@@ -27,6 +27,7 @@ class Calpinage_light:
                  tilt_EW=20,f_EW=False,f_plot=False,d_rows=0.6,
                  parallel="long",optimal="tilt",
                  tecno='PV',
+                 tecno_df=None,
                  elec_demand=None,
                  heat_demand=None,
                  irradiance=None):
@@ -64,11 +65,44 @@ class Calpinage_light:
         self.f_EW=f_EW
         self.f_plot=f_plot
         self.tecno=tecno
-        self.heat_demand=heat_demand
-        self.elec_demand=elec_demand
         self.ghi=irradiance[0]
         self.dhi=irradiance[1]
         self.dni=irradiance[2]
+        self.Tair=irradiance[3]
+        self.COPa=3
+        self.COPbrine=4
+        tecno_df.fillna(0,inplace=True) #could not convert to float"
+        if self.tecno=='PV':
+            self.elec_demand=elec_demand+heat_demand/self.COPa
+            self.heat_demand=heat_demand
+            self.PV_el_ef=float(tecno_df.loc[tecno_df.label=='pv','efficiency'])
+        elif self.tecno=='ST':
+            self.heat_demand=heat_demand
+            self.elec_demand=elec_demand
+            self.STeta_0=float(tecno_df.loc[tecno_df.label=='solarCollector',
+                                    'eta_0'])
+            self.STa_1=float(tecno_df.loc[tecno_df.label=='solarCollector',
+                                    'a_1'])
+            self.STa_2=float(tecno_df.loc[tecno_df.label=='solarCollector',
+                                    'a_2'])
+            self.ST_Tin=float(tecno_df.loc[tecno_df.label=='solarCollector',
+                                    'temp_collector_inlet'])
+            self.ST_DT=float(tecno_df.loc[tecno_df.label=='solarCollector',
+                                    'delta_temp_n'])
+            
+        else:
+            self.elec_demand=elec_demand+heat_demand/self.COPbrine
+            self.heat_demand=heat_demand            
+            self.PVT_el_ef=tecno_df.loc[tecno_df.label=='pvt','efficiency']
+            self.PVTeta_0=float(tecno_df.loc[tecno_df.label=='pvt',
+                                    'eta_0'])
+            self.PVTa_1=float(tecno_df.loc[tecno_df.label=='pvt',
+                                    'a_1'])
+            self.PVTa_2=float(tecno_df.loc[tecno_df.label=='pvt',
+                                    'a_2'])
+            self.PVT_th_ef
+        
+        
         self.fit_panel(tilt,parallel)
         self.tz='Europe/Zurich'
         self.site = pvlib.location.Location(self.lat, self.long, tz=self.tz)
@@ -86,12 +120,52 @@ class Calpinage_light:
                                 solar_zenith=solar_position['apparent_zenith'],
                                 solar_azimuth=solar_position['azimuth'])
         self.poa_irradiance=POA_irradiance['poa_global']
-        
-        self.production=self.poa_irradiance*(
-            self.roof.loc[self.roof.index[0],'ratio']*self.L*self.W)
-        self.production.reset_index(inplace=True,drop=True)
-        self.annual_prod=self.production.sum()
-        self.coverage=self.production-self.demand
+        if self.tecno=='PV':
+            self.production_el=self.poa_irradiance*(
+                self.roof.loc[self.roof.index[0],'ratio']*self.L*self.W)*self.PV_el_ef/1000
+            self.production_el.reset_index(inplace=True,drop=True)
+            # self.production.drop(self.production.index[-1],inplace=True)
+            self.annual_prod_el=self.production_el.sum()
+            self.elec_demand.reset_index(inplace=True,drop=True)
+            coverage_el_index=self.production_el>self.elec_demand
+            self.coverage_el=self.production_el
+            self.coverage_el.loc[coverage_el_index]=self.elec_demand.loc[coverage_el_index]
+            self.annual_cov_el=self.coverage_el.sum()
+            
+            self.production_th=self.production_el*0
+            self.annual_prod_th=0
+            self.annual_cov_th=0
+            self.cover_ratio_th=0
+            try:
+                self.cover_ratio_el=self.annual_cov_el/self.annual_prod_el                
+            except:
+                self.cover_ratio_el=0
+                
+                
+        elif  self.tecno=='ST':
+            self.ST_th_ef=self.poa_irradiance*0
+            self.ST_th_ef.loc[self.poa_irradiance>0]=self.STeta_0-self.STa_1*(
+                self.ST_Tin+self.ST_DT/2-self.Tair)/self.poa_irradiance-self.STa_2*(
+                    self.ST_Tin+self.ST_DT/2-self.Tair)**2/self.poa_irradiance
+            self.ST_th_ef.loc[self.ST_th_ef<=0]=0
+            self.production_th=self.poa_irradiance*(
+                self.roof.loc[self.roof.index[0],'ratio']*self.L*self.W)*self.ST_th_ef
+            self.production_th.reset_index(inplace=True,drop=True)
+            self.annual_prod_th=self.production_th.sum()
+            self.heat_demand.reset_index(inplace=True,drop=True)
+            coverage_th_index=self.production_th>self.heat_demand
+            self.coverage_th=self.production_th
+            self.coverage_th.loc[coverage_th_index]=self.heat_demand.loc[coverage_th_index]
+            self.annual_cov_th=self.coverage_th.sum()
+            
+            self.production_el=self.production_th*0
+            self.annual_prod_el=0
+            self.annual_cov_el=0
+            self.cover_ratio_el=0
+        try:
+            self.cover_ratio_th=self.annual_cov_th/self.annual_prod_th
+        except:
+            self.cover_ratio_th=0
         return None
     
     def fit_panel(self,tilt,parallel):
