@@ -221,17 +221,22 @@ class weather:
                 tecno_PVT=self.df_hood.loc[bld,'PVT']
                 tecno_flag=[tecno_PV, tecno_ST, tecno_PVT]
                 tecno_list=['PV', 'ST', 'PVT']
-                layout_list=['portrait','est-west']
-                arrangement_list=['short','long','south']
-                opt_type=['tilt','max4dist']
-                for opt in opt_type:
-                    
+                layout_list=['est-west']#,'portrait']
+                arrangement_list=['south','long','short',]
+                
+                
+                for lay in layout_list:
+                    if lay=="portrait":
+                        f_EW=False
+                        opt_type=['tilt','max4dist','tilt+5',
+                                  'tilt+10','tilt+15','tilt+20',
+                                  'tilt+25','tilt+30','tilt+35']
+                    else:
+                        f_EW=True
+                        opt_type=['tilt']
                     for arr in arrangement_list:
-                        for lay in layout_list:
-                            if lay=="portrait":
-                                f_EW=False
-                            else:
-                                f_EW=True
+                        self.opt_tilt=0
+                        for opt in opt_type:    
                             for i in range(3):
                                 if tecno_flag[i]==1:
                             
@@ -241,21 +246,24 @@ class weather:
                                     roof_short_opt=cp(orientation=float(self.df_hood.loc[bld,'bld_orientation']),
                                        lat=float(self.df_hood.loc[bld,'latitude']),
                                        long=float(self.df_hood.loc[bld,'longitude']),
-                                       w=1,l=2,
+                                       w=1,l=4,
                                        W=float(self.df_hood.loc[bld,'short_side']),
                                        L=float(self.df_hood.loc[bld,'long_side']),
-                                       tilt_EW=20,f_EW=False,
-                                       f_plot=False,
+                                       tilt_EW=20,f_EW=f_EW,
+                                       f_plot=True,
                                        d_rows=0.6,
-                                       parallel=arr,optimal=opt,
+                                       parallel=arr,
+                                       optimal=opt,
+                                       opt_tilt=self.opt_tilt,
                                        # demand=demand.iloc[:,1],#"electricityDemand","spaceHeatingDemand","domesticHotWaterDemand"
                                        elec_demand=elec_demand,
                                        heat_demand=heat_demand,
                                        tecno=tecno_list[i],
                                        irradiance=[self.irr_TMY.ghi,self.irr_TMY.dhi,self.irr_TMY.dni,self.irr_TMY.temp_air],
                                        tecno_df=self.df_tecno)
-                                    print('end')
-                                    
+                                    # print('end')
+                                    if opt=='tilt':
+                                        self.opt_tilt=roof_short_opt.roof.tilt[0]
                                     self.solar_cases.loc[
                                         self.solar_cases.index.size]=[bld,
                                                                       tecno_list[i],
@@ -280,42 +288,10 @@ class weather:
                                                                       float(roof_short_opt.heat_demand.sum())
                                                                       
                                                                       ]
-                          
+            self.solar_cases.to_csv('solar_cases.csv',sep=";")              
     
             return None
-    def optimize_tilt(self,orient=0,
-                          demand=None,
-                          lat=42,
-                          long=6,
-                          tilt=0):
-        def loss(x,lat,long,orient):
-            PVGIS_data = pvlib.iotools.get_pvgis_hourly(lat, long,components=False,
-                                                    surface_azimuth=orient,
-                                                    start=2016,
-                                                    end=2016,
-                                                    surface_tilt=x,
-                                                    optimal_surface_tilt=False,
-                                                    optimalangles=False,
-                                                    map_variables=True)
-            normal_irr_profile=PVGIS_data[0].poa_global/PVGIS_data[0].poa_global.sum()
-            normal_irr_profile=normal_irr_profile.iloc[:demand.index.size].reset_index(drop=True)
-            normal_demand_profile=demand/demand.sum()
-            normal_coverage_profile=normal_demand_profile
-            for cov in normal_coverage_profile.index:
-                if normal_irr_profile.loc[cov]>normal_demand_profile.loc[cov]:
-                    normal_coverage_profile.loc[cov]=normal_demand_profile.loc[cov]
-                else:
-                    normal_coverage_profile.loc[cov]=normal_irr_profile.loc[cov]
-            irr_cov_sum=normal_coverage_profile.sum()
-            return irr_cov_sum
-        # args=
-        x_bounds = (tilt, 90)
-        results_df=pd.DataFrame(columns=['tilt','diff'])
-        for x in range(tilt,80,10):
-            results_df.loc[results_df.index.size,'diff']=loss(x,lat,long,orient)
-            results_df.loc[results_df.index.size-1,'tilt']=x
-        
-        optimal_x = results_df.tilt[0]
+   
         
                 
     def get_TMY(self):

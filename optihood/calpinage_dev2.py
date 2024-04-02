@@ -25,7 +25,9 @@ class Calpinage_light:
     def __init__(self,orientation=180,lat=42.6,long=6,tilt=20, 
                  W=10,L=10,w=1,l=2.05,d_W=0.5,d_L=0.5,
                  tilt_EW=20,f_EW=False,f_plot=False,d_rows=0.6,
-                 parallel="long",optimal="tilt",
+                 parallel="long",
+                 optimal="tilt",
+                 opt_tilt=0,
                  tecno='PV',
                  tecno_df=None,
                  elec_demand=None,
@@ -47,6 +49,7 @@ class Calpinage_light:
         self.orientation=orientation
         self.azimut=180
         self.optimal=optimal
+        self.opt_tilt=opt_tilt
         self.W=W
         self.L=L
         self.lat=lat
@@ -100,7 +103,10 @@ class Calpinage_light:
                                     'a_1'])
             self.PVTa_2=float(tecno_df.loc[tecno_df.label=='pvt',
                                     'a_2'])
-            self.PVT_th_ef
+            self.PVT_Tin=float(tecno_df.loc[tecno_df.label=='pvt',
+                                    'temp_collector_inlet'])
+            self.PVT_DT=float(tecno_df.loc[tecno_df.label=='pvt',
+                                    'delta_temp_n'])
         
         
         self.fit_panel(tilt,parallel)
@@ -111,15 +117,34 @@ class Calpinage_light:
 
     def satisfy_demand(self):
         solar_position = self.site.get_solarposition(times=self.ghi.index)
-        POA_irradiance = pvlib.irradiance.get_total_irradiance(
-                                surface_tilt=self.roof.loc[0,'tilt'],
-                                surface_azimuth=self.conv_orient,                               
-                                ghi=self.ghi,
-                                dhi=self.dhi,
-                                dni=self.dni,
-                                solar_zenith=solar_position['apparent_zenith'],
-                                solar_azimuth=solar_position['azimuth'])
-        self.poa_irradiance=POA_irradiance['poa_global']
+        if self.f_EW==False:
+            POA_irradiance = pvlib.irradiance.get_total_irradiance(
+                                    surface_tilt=self.roof.loc[0,'tilt'],
+                                    surface_azimuth=self.roof.loc[0,'cll_azimut'],#self.conv_orient+self.teta,                               
+                                    ghi=self.ghi,
+                                    dhi=self.dhi,
+                                    dni=self.dni,
+                                    solar_zenith=solar_position['apparent_zenith'],
+                                    solar_azimuth=solar_position['azimuth'])
+            self.poa_irradiance=POA_irradiance['poa_global']
+        elif self.f_EW==True:
+            POA_irradiance1 = pvlib.irradiance.get_total_irradiance(
+                                    surface_tilt=self.roof.loc[0,'tilt'],
+                                    surface_azimuth=self.roof.loc[0,'cll_azimut'],#self.conv_orient+self.teta,                               
+                                    ghi=self.ghi,
+                                    dhi=self.dhi,
+                                    dni=self.dni,
+                                    solar_zenith=solar_position['apparent_zenith'],
+                                    solar_azimuth=solar_position['azimuth'])
+            POA_irradiance2 = pvlib.irradiance.get_total_irradiance(
+                                    surface_tilt=self.roof.loc[0,'tilt'],
+                                    surface_azimuth=self.roof.loc[0,'cll_azimut']+180,#self.conv_orient+self.teta,                               
+                                    ghi=self.ghi,
+                                    dhi=self.dhi,
+                                    dni=self.dni,
+                                    solar_zenith=solar_position['apparent_zenith'],
+                                    solar_azimuth=solar_position['azimuth'])
+            self.poa_irradiance=(POA_irradiance1['poa_global']+POA_irradiance2['poa_global'])/2
         if self.tecno=='PV':
             self.production_el=self.poa_irradiance*(
                 self.roof.loc[self.roof.index[0],'ratio']*self.L*self.W)*self.PV_el_ef/1000
@@ -149,7 +174,7 @@ class Calpinage_light:
                     self.ST_Tin+self.ST_DT/2-self.Tair)**2/self.poa_irradiance
             self.ST_th_ef.loc[self.ST_th_ef<=0]=0
             self.production_th=self.poa_irradiance*(
-                self.roof.loc[self.roof.index[0],'ratio']*self.L*self.W)*self.ST_th_ef
+                self.roof.loc[self.roof.index[0],'ratio']*self.L*self.W)*self.ST_th_ef/1000
             self.production_th.reset_index(inplace=True,drop=True)
             self.annual_prod_th=self.production_th.sum()
             self.heat_demand.reset_index(inplace=True,drop=True)
@@ -162,10 +187,34 @@ class Calpinage_light:
             self.annual_prod_el=0
             self.annual_cov_el=0
             self.cover_ratio_el=0
-        try:
-            self.cover_ratio_th=self.annual_cov_th/self.annual_prod_th
-        except:
-            self.cover_ratio_th=0
+            try:
+                self.cover_ratio_th=self.annual_cov_th/self.annual_prod_th
+            except:
+                self.cover_ratio_th=0
+        else :
+            self.PVT_th_ef=self.poa_irradiance*0
+            self.PVT_th_ef.loc[self.poa_irradiance>0]=self.PVTeta_0-self.PVTa_1*(
+                self.PVT_Tin+self.PVT_DT/2-self.Tair)/self.poa_irradiance-self.PVTa_2*(
+                    self.PVT_Tin+self.PVT_DT/2-self.Tair)**2/self.poa_irradiance
+            self.PVT_th_ef.loc[self.PVT_th_ef<=0]=0
+            self.production_th=self.poa_irradiance*(
+                self.roof.loc[self.roof.index[0],'ratio']*self.L*self.W)*self.PVT_th_ef/1000
+            self.production_th.reset_index(inplace=True,drop=True)
+            self.annual_prod_th=self.production_th.sum()
+            self.heat_demand.reset_index(inplace=True,drop=True)
+            coverage_th_index=self.production_th>self.heat_demand
+            self.coverage_th=self.production_th
+            self.coverage_th.loc[coverage_th_index]=self.heat_demand.loc[coverage_th_index]
+            self.annual_cov_th=self.coverage_th.sum()
+            
+            self.production_el=self.production_th*0
+            self.annual_prod_el=0
+            self.annual_cov_el=0
+            self.cover_ratio_el=0
+            try:
+                self.cover_ratio_th=self.annual_cov_th/self.annual_prod_th
+            except:
+                self.cover_ratio_th=0
         return None
     
     def fit_panel(self,tilt,parallel):
@@ -182,18 +231,29 @@ class Calpinage_light:
         
         
         
-        #orient diff convention is 0°South, 90°West, -90°Est
+        #Conventional building orientation is 0°South, 90°West, -90°Est
         self.conv_orient=self.orientation-self.azimut
         
-        if parallel=="short":
-            if self.conv_orient>0:
-                self.teta=-90
+        if self.f_EW:
+            if parallel=="short":
+                self.teta=0
+            elif parallel=='long':
+                if self.conv_orient>0:
+                    self.teta=-90
+                else:
+                    self.teta=90
             else:
-                self.teta=90
-        elif parallel=='long':
-            self.teta=0
+                self.teta=-self.conv_orient
         else:
-            self.teta=-self.conv_orient
+            if parallel=="short":
+                if self.conv_orient>0:
+                    self.teta=-90
+                else:
+                    self.teta=90
+            elif parallel=='long':
+                self.teta=0
+            else:
+                self.teta=-self.conv_orient
             
         
         B = box(0.0, 0.0, self.L, self.W)
@@ -215,6 +275,21 @@ class Calpinage_light:
             # equal to the minimal
             self.tilt=math.floor(math.asin(self.d_rows_min/self.l*math.tan(
                 self.W_S_A/180*3.14))*180/3.14)
+        elif self.f_EW!=True and self.optimal=="tilt+5":
+            self.tilt=self.opt_tilt+5
+        elif self.f_EW!=True and self.optimal=="tilt+10":
+            self.tilt=self.opt_tilt+10
+        elif self.f_EW!=True and self.optimal=="tilt+15":
+            self.tilt=self.opt_tilt+15
+        elif self.f_EW!=True and self.optimal=="tilt+20":
+            self.tilt=self.opt_tilt+20
+        elif self.f_EW!=True and self.optimal=="tilt+25":
+            self.tilt=self.opt_tilt+25
+        elif self.f_EW!=True and self.optimal=="tilt+30":
+            self.tilt=self.opt_tilt+30
+        elif self.f_EW!=True and self.optimal=="tilt+35":
+            self.tilt=self.opt_tilt+35
+                    
         else:                
             self.tilt=tilt
         
@@ -223,7 +298,7 @@ class Calpinage_light:
             # self.off_row=np.max([self.w*np.sin(np.radians(self.tilt_EW))*1/np.tan(np.radians(self.W_S_A)),self.d_rows_min])
             self.off_row=np.min([self.w*np.sin(np.radians(self.tilt_EW))*1/np.tan(np.radians(self.W_S_A)),self.d_rows_min])
             if self.teta % 90 ==0:
-                if self.teta == -90: 
+                if self.teta == +90: 
                     b3 = box(B1.bounds[2]-self.l, B1.bounds[3]-self.w_loop, 
                              B1.bounds[2], B1.bounds[3])
                     L_west=LineString([(B1.bounds[0], B1.bounds[3]), (B1.bounds[2], B1.bounds[3])]) 
@@ -231,7 +306,7 @@ class Calpinage_light:
                     b6= box(L_west.bounds[0], L_west.bounds[1], 
                             L_east.bounds[2], L_east.bounds[3])
                     
-                elif self.teta== 90:
+                elif self.teta== -90:
                     b3 = box(B1.bounds[0], B1.bounds[3]-self.w_loop, 
                              B1.bounds[0]+self.l, B1.bounds[3])
                     L_west=LineString([(B1.bounds[0], B1.bounds[3]), (B1.bounds[2], B1.bounds[3])]) 
@@ -247,22 +322,23 @@ class Calpinage_light:
                     b6= box(L_east.bounds[0], L_east.bounds[1], 
                             L_west.bounds[2], L_west.bounds[3])
                     
-                con_area=b3.area*self.off_pnl/self.l
+                con_area=b3.area*((self.l+self.off_pnl)/self.l-1)
                 self.rows.loc[self.rows.index.size,'edge_south']=L_east.length
                 self.rows.loc[self.rows.index.size-1,'edge_north']=L_west.length
                 self.rows.loc[self.rows.index.size-1,'row_surf']=b6.area
-                self.rows.loc[self.rows.index.size-1,'N_panel']=np.floor((b6.area+con_area)/(b3.area+con_area)) 
+                self.rows.loc[self.rows.index.size-1,'N_panel']=np.floor((b6.area)/(b3.area+con_area)) 
                 if self.f_plot==True:
                     fig, ax = plt.subplots(figsize=(self.L, self.W))
                     ax.plot(*B.exterior.xy)
                     ax.plot(*B1.exterior.xy)
+                    ax.plot(*b6.exterior.xy)
                     
                 if self.rows.loc[self.rows.index.size-1,'N_panel']>0:
                     if self.teta==-90:
                         # b7=affinity.translate(b3,xoff=b6.bounds[0]-b3.bounds[0],
                         #                       yoff=b6.bounds[3]-b3.bounds[3])
                         b7=b3
-                    elif self.teta==90:
+                    elif self.teta==+90:
                         b7=affinity.translate(b3,xoff=b6.bounds[0]-b3.bounds[0],
                                               yoff=b6.bounds[1]-b3.bounds[1])
                     elif self.teta == 0:
@@ -277,7 +353,7 @@ class Calpinage_light:
                         
                     for z in range(0,int(self.rows.loc[self.rows.index.size-1,'N_panel'])):
                         
-                        b8=affinity.translate(b7,xoff=z*(self.l+self.off_pnl)*np.sin(np.radians(self.teta)),
+                        b8=affinity.translate(b7,xoff=-z*(self.l+self.off_pnl)*np.sin(np.radians(self.teta)),
                                           yoff=-z*(self.l+self.off_pnl)*np.cos(np.radians(self.teta)))
                         
                         if self.f_plot==True:
@@ -327,23 +403,27 @@ class Calpinage_light:
                 self.roof.loc[self.roof.index.size,'N_panel']=self.rows.loc[self.rows.index[-i]:,'N_panel'].sum()*2
                 self.roof.loc[self.roof.index.size-1,'ratio']=self.roof.loc[self.roof.index.size-1,'N_panel']*self.l*self.w/B1.area
                 self.roof.loc[self.roof.index.size-1,'tilt']=self.tilt
-                self.roof.loc[self.roof.index.size-1,'cll_azimut']=self.teta+self.conv_orient
+                if parallel=='short':
+                    self.roof.loc[self.roof.index.size-1,'cll_azimut']=self.conv_orient-90
+                elif parallel=='long':
+                    self.roof.loc[self.roof.index.size-1,'cll_azimut']=self.conv_orient
+                elif parallel=='south':
+                    self.roof.loc[self.roof.index.size-1,'cll_azimut']=90
                 self.roof.loc[self.roof.index.size-1,'row_dist']=self.off_row
                 
             elif self.teta<0:
-                b1 = box(B1.bounds[2]-self.l, B1.bounds[1], 
-                         B1.bounds[2], B1.bounds[1]+self.w_loop)
+                b1 = box(B1.bounds[0], B1.bounds[1], 
+                         B1.bounds[0]+self.l, B1.bounds[1]+self.w_loop)
                 
-                b2 = affinity.rotate(b1, -90+self.teta, (b1.bounds[0], b1.bounds[1]))
-                b3=affinity.translate(b2,xoff=B1.bounds[2]-b2.bounds[2],
-                                      yoff=B1.bounds[1]-b2.bounds[1])
+                b2 = affinity.rotate(b1, self.teta, (b1.bounds[0], b1.bounds[1]))
+                b3=affinity.translate(b2,xoff=B1.bounds[0]-b2.bounds[0],
+                                      yoff=self.l*math.cos(math.radians(self.teta)) )
                 con_area=b3.area*self.off_pnl/self.l
                 b3_xy=pd.DataFrame(b3.boundary.xy).sort_values(by=0,axis=1)
                 
                 L1=LineString([(B1.bounds[0], B1.bounds[1]), (B1.bounds[2], B1.bounds[1])]) 
-                L1=affinity.rotate(L1,90+self.teta,(B1.bounds[2],B1.bounds[1]))
-                L1=affinity.translate(L1,yoff=b3.bounds[1]+self.l*math.cos(math.radians(self.teta))
-                                        -B1.bounds[1],xoff=0)
+                L1=affinity.rotate(L1,self.teta,(B1.bounds[0],B1.bounds[1]))
+                L1=affinity.translate(L1,yoff=self.l*math.cos(math.radians(self.teta)),xoff=0)
                 L1=affinity.scale(L1,xfact=np.max([self.L/self.l,self.W/self.w_loop]),
                                     yfact=np.max([self.L/self.l,self.W/self.w_loop]))
 
@@ -361,9 +441,11 @@ class Calpinage_light:
                     ax.plot(*b3.exterior.xy)
                     plt.xlim([-self.l, self.L+self.l])
                     plt.ylim([-self.w_loop, self.W+self.w_loop])
-                # ax.plot(*b6.exterior.xy)
-                # ax.plot(*L_east.xy)
-                # ax.plot(*L_west.xy)
+                    # ax.plot(*b4.exterior.xy)
+                    # ax.plot(*b4a.exterior.xy)
+                    # ax.plot(*b6.exterior.xy)
+                    ax.plot(*L_east.xy)
+                    ax.plot(*L_west.xy)
                 
                 
                 i=0
@@ -374,15 +456,15 @@ class Calpinage_light:
                     i+=1
                     # ax.plot(*L_west.xy)
                     # ax.plot(*L_east.xy)
-                    b4a = box(L_west.intersection(B1).bounds[0], L_west.intersection(B1).bounds[1], 
-                             L_west.intersection(B1).bounds[0]-self.w_loop, L_west.intersection(B1).bounds[1]+L_west.intersection(B1).length)
-                    b4 = affinity.rotate(b4a,self.teta, (L_west.intersection(B1).bounds[0],
-                                                        L_west.intersection(B1).bounds[1]),
+                    b4a = box(L_west.intersection(B1).bounds[0], L_west.intersection(B1).bounds[3], 
+                             L_west.intersection(B1).bounds[0]+self.w_loop, L_west.intersection(B1).bounds[3]-L_west.intersection(B1).length)
+                    b4 = affinity.rotate(b4a,-self.teta, (L_west.intersection(B1).bounds[0],
+                                                        L_west.intersection(B1).bounds[3]),
                                                                             use_radians=False)
                     
-                    b5b = box(L_east.intersection(B1).bounds[2], L_east.intersection(B1).bounds[3], 
-                             L_east.intersection(B1).bounds[2]+self.w_loop, L_east.intersection(B1).bounds[3]-L_east.intersection(B1).length)
-                    b5 = affinity.rotate(b5b, self.teta, (L_east.intersection(B1).bounds[2],
+                    b5b = box(L_east.intersection(B1).bounds[0], L_east.intersection(B1).bounds[3], 
+                             L_east.intersection(B1).bounds[0]-self.w_loop, L_east.intersection(B1).bounds[3]-L_east.intersection(B1).length)
+                    b5 = affinity.rotate(b5b, -self.teta, (L_east.intersection(B1).bounds[0],
                                                         L_east.intersection(B1).bounds[3]),
                                                                             use_radians=False)
                     # ax.plot(*b4.exterior.xy)
@@ -402,14 +484,14 @@ class Calpinage_light:
                     self.rows.loc[self.rows.index.size-1,'row_surf']=b6.area   
                     if self.rows.loc[self.rows.index.size-1,'N_panel']>0:
                         
-                        b7=affinity.translate(b3,xoff=b6.bounds[2]-b3.bounds[2],
+                        b7=affinity.translate(b3,xoff=b6.bounds[0]-b3.bounds[0],
                                               yoff=b6.bounds[3]-b3.bounds[3])
                         b7_xy=pd.DataFrame(b7.boundary.xy).sort_values(by=0,axis=1).T.drop_duplicates().T
                         if self.f_plot==True:
                             ax.plot(*b7.exterior.xy)
                             
                         for z in range(1,int(self.rows.loc[self.rows.index.size-1,'N_panel'])):
-                            b8=affinity.translate(b7,xoff=z*((self.l+self.off_pnl)*np.sin(np.radians(self.teta))),
+                            b8=affinity.translate(b7,xoff=-z*((self.l+self.off_pnl)*np.sin(np.radians(self.teta))),
                                               yoff=-z*((self.l+self.off_pnl)*np.cos(np.radians(self.teta))))
                             if self.f_plot==True:
                                 ax.plot(*b8.exterior.xy)
@@ -422,7 +504,7 @@ class Calpinage_light:
                 self.roof.loc[self.roof.index.size,'N_panel']=self.rows.loc[self.rows.index[-i-1]:,'N_panel'].sum()*2
                 self.roof.loc[self.roof.index.size-1,'ratio']=self.roof.loc[self.roof.index.size-1,'N_panel']*self.l*self.w/B1.area
                 self.roof.loc[self.roof.index.size-1,'tilt']=self.tilt
-                self.roof.loc[self.roof.index.size-1,'cll_azimut']=self.teta+self.conv_orient
+                self.roof.loc[self.roof.index.size-1,'cll_azimut']=self.teta+self.conv_orient+90
                 self.roof.loc[self.roof.index.size-1,'row_dist']=self.off_row
             elif self.teta>0:
                 b1 = box(B1.bounds[0], B1.bounds[1], 
@@ -516,7 +598,7 @@ class Calpinage_light:
                 self.roof.loc[self.roof.index.size,'N_panel']=self.rows.loc[self.rows.index[-i-1]:,'N_panel'].sum()*2
                 self.roof.loc[self.roof.index.size-1,'ratio']=self.roof.loc[self.roof.index.size-1,'N_panel']*self.l*self.w/B1.area
                 self.roof.loc[self.roof.index.size-1,'tilt']=self.tilt
-                self.roof.loc[self.roof.index.size-1,'cll_azimut']=self.teta+self.conv_orient
+                self.roof.loc[self.roof.index.size-1,'cll_azimut']=self.teta+self.conv_orient-90
                 self.roof.loc[self.roof.index.size-1,'row_dist']=self.off_row
             
         else:
