@@ -408,7 +408,7 @@ class Calpinage_light:
                 elif parallel=='long':
                     self.roof.loc[self.roof.index.size-1,'cll_azimut']=self.conv_orient
                 elif parallel=='south':
-                    self.roof.loc[self.roof.index.size-1,'cll_azimut']=90
+                    self.roof.loc[self.roof.index.size-1,'cll_azimut']=-90
                 self.roof.loc[self.roof.index.size-1,'row_dist']=self.off_row
                 
             elif self.teta<0:
@@ -417,13 +417,14 @@ class Calpinage_light:
                 
                 b2 = affinity.rotate(b1, self.teta, (b1.bounds[0], b1.bounds[1]))
                 b3=affinity.translate(b2,xoff=B1.bounds[0]-b2.bounds[0],
-                                      yoff=self.l*math.cos(math.radians(self.teta)) )
+                                      yoff=B1.bounds[1]-b2.bounds[1],)
                 con_area=b3.area*self.off_pnl/self.l
                 b3_xy=pd.DataFrame(b3.boundary.xy).sort_values(by=0,axis=1)
                 
                 L1=LineString([(B1.bounds[0], B1.bounds[1]), (B1.bounds[2], B1.bounds[1])]) 
                 L1=affinity.rotate(L1,self.teta,(B1.bounds[0],B1.bounds[1]))
-                L1=affinity.translate(L1,yoff=self.l*math.cos(math.radians(self.teta)),xoff=0)
+                L1=affinity.translate(L1,xoff=B1.bounds[0]-b2.bounds[0],
+                                      yoff=B1.bounds[1]-b2.bounds[1])
                 L1=affinity.scale(L1,xfact=np.max([self.L/self.l,self.W/self.w_loop]),
                                     yfact=np.max([self.L/self.l,self.W/self.w_loop]))
 
@@ -457,15 +458,15 @@ class Calpinage_light:
                     # ax.plot(*L_west.xy)
                     # ax.plot(*L_east.xy)
                     b4a = box(L_west.intersection(B1).bounds[0], L_west.intersection(B1).bounds[3], 
-                             L_west.intersection(B1).bounds[0]+self.w_loop, L_west.intersection(B1).bounds[3]-L_west.intersection(B1).length)
-                    b4 = affinity.rotate(b4a,-self.teta, (L_west.intersection(B1).bounds[0],
-                                                        L_west.intersection(B1).bounds[3]),
+                             L_west.intersection(B1).bounds[0]+L_west.intersection(B1).length, L_west.intersection(B1).bounds[3]+self.w_loop)
+                    b4 = affinity.rotate(b4a,self.teta, (b4a.bounds[0],
+                                                        b4a.bounds[1]),
                                                                             use_radians=False)
                     
                     b5b = box(L_east.intersection(B1).bounds[0], L_east.intersection(B1).bounds[3], 
-                             L_east.intersection(B1).bounds[0]-self.w_loop, L_east.intersection(B1).bounds[3]-L_east.intersection(B1).length)
-                    b5 = affinity.rotate(b5b, -self.teta, (L_east.intersection(B1).bounds[0],
-                                                        L_east.intersection(B1).bounds[3]),
+                             L_east.intersection(B1).bounds[0]+L_east.intersection(B1).length, L_east.intersection(B1).bounds[3]-self.w_loop)
+                    b5 = affinity.rotate(b5b, self.teta, (b5b.bounds[0],
+                                                        b5b.bounds[3]),
                                                                             use_radians=False)
                     # ax.plot(*b4.exterior.xy)
                     # ax.plot(*b5.exterior.xy)
@@ -504,22 +505,21 @@ class Calpinage_light:
                 self.roof.loc[self.roof.index.size,'N_panel']=self.rows.loc[self.rows.index[-i-1]:,'N_panel'].sum()*2
                 self.roof.loc[self.roof.index.size-1,'ratio']=self.roof.loc[self.roof.index.size-1,'N_panel']*self.l*self.w/B1.area
                 self.roof.loc[self.roof.index.size-1,'tilt']=self.tilt
-                self.roof.loc[self.roof.index.size-1,'cll_azimut']=self.teta+self.conv_orient+90
+                self.roof.loc[self.roof.index.size-1,'cll_azimut']=self.teta-90
                 self.roof.loc[self.roof.index.size-1,'row_dist']=self.off_row
             elif self.teta>0:
-                b1 = box(B1.bounds[0], B1.bounds[1], 
-                         B1.bounds[0]+self.l, B1.bounds[1]+self.w_loop)
+                b1 = box(B1.bounds[2]-self.l, B1.bounds[1], 
+                         B1.bounds[2], B1.bounds[1]+self.w_loop)
                 
-                b2 = affinity.rotate(b1, -90+self.teta, (b1.bounds[0], b1.bounds[1]))
-                b3=affinity.translate(b2,xoff=0,
+                b2 = affinity.rotate(b1, 90-self.teta, (b1.bounds[0], b1.bounds[1]))
+                b3=affinity.translate(b2,xoff=B1.bounds[2]-b2.bounds[2],
                                       yoff=B1.bounds[1]-b2.bounds[1])
                 con_area=b3.area*self.off_pnl/self.l
                 b3_xy=pd.DataFrame(b3.boundary.xy).sort_values(by=0,axis=1).T.drop_duplicates().T
                 
                 L1=LineString([(B1.bounds[0], B1.bounds[1]), (B1.bounds[2], B1.bounds[1])]) 
-                L1=affinity.rotate(L1,-90+self.teta,(B1.bounds[0],B1.bounds[1]))
-                L1=affinity.translate(L1,yoff=b3_xy.loc[1,b3_xy.loc[0,:]==b3_xy.loc[0,:].min()]
-                                        -B1.bounds[1],xoff=0)
+                L1=affinity.rotate(L1,90-self.teta,(B1.bounds[0],B1.bounds[1]))
+                L1=affinity.translate(L1,yoff=0,xoff=B1.bounds[2]-B1.bounds[0]-self.l*math.sin(math.radians(self.teta)))
                 L1=affinity.scale(L1,xfact=np.max([self.L/self.l,self.W/self.w_loop]),
                                     yfact=np.max([self.L/self.l,self.W/self.w_loop]))
                                                                                                                     
@@ -546,16 +546,16 @@ class Calpinage_light:
                     i+=1
                     # ax.plot(*L_west.xy)
                     # ax.plot(*L_east.xy)
-                    b4a = box(L_west.intersection(B1).bounds[2], L_west.intersection(B1).bounds[1], 
-                             L_west.intersection(B1).bounds[2]+self.w_loop, L_west.intersection(B1).bounds[1]+L_west.intersection(B1).length)
-                    b4 = affinity.rotate(b4a,self.teta, (L_west.intersection(B1).bounds[2],
-                                                        L_west.intersection(B1).bounds[1]),
+                    b4a = box(L_west.intersection(B1).bounds[2], L_west.intersection(B1).bounds[3], 
+                             L_west.intersection(B1).bounds[2]-self.w_loop, L_west.intersection(B1).bounds[3]-L_west.intersection(B1).length)
+                    b4 = affinity.rotate(b4a,-self.teta, (L_west.intersection(B1).bounds[2],
+                                                        L_west.intersection(B1).bounds[3]),
                                                                             use_radians=False)
                     
-                    b5b = box(L_east.intersection(B1).bounds[2], L_east.intersection(B1).bounds[1], 
-                             L_east.intersection(B1).bounds[2]-self.w_loop, L_east.intersection(B1).bounds[1]+L_east.intersection(B1).length)
-                    b5 = affinity.rotate(b5b, self.teta, (L_east.intersection(B1).bounds[2],
-                                                        L_east.intersection(B1).bounds[1]),
+                    b5b = box(L_east.intersection(B1).bounds[2], L_east.intersection(B1).bounds[3], 
+                             L_east.intersection(B1).bounds[2]+self.w_loop, L_east.intersection(B1).bounds[3]-L_east.intersection(B1).length)
+                    b5 = affinity.rotate(b5b, -self.teta, (L_east.intersection(B1).bounds[2],
+                                                        L_east.intersection(B1).bounds[3]),
                                                                             use_radians=False)
                     # ax.plot(*b4.exterior.xy)
                     # ax.plot(*b5.exterior.xy)
@@ -574,7 +574,7 @@ class Calpinage_light:
                     self.rows.loc[self.rows.index.size-1,'row_surf']=b6.area   
                     if self.rows.loc[self.rows.index.size-1,'N_panel']>0:
                         
-                        b7=affinity.translate(b3,xoff=b6.bounds[0]-b3.bounds[0],
+                        b7=affinity.translate(b3,xoff=b6.bounds[2]-b3.bounds[2],
                                               yoff=b6.bounds[3]-b3.bounds[3])
                         b7_xy=pd.DataFrame(b7.boundary.xy).sort_values(by=0,axis=1).T.drop_duplicates().T
                         # ax.plot(*b6.exterior.xy)
@@ -582,7 +582,7 @@ class Calpinage_light:
                             ax.plot(*b7.exterior.xy)
                             
                         for z in range(1,int(self.rows.loc[self.rows.index.size-1,'N_panel'])):
-                            b8=affinity.translate(b7,xoff=z*((self.l+self.off_pnl)*np.sin(np.radians(self.teta))),
+                            b8=affinity.translate(b7,xoff=-z*((self.l+self.off_pnl)*np.sin(np.radians(self.teta))),
                                               yoff=-z*((self.l+self.off_pnl)*np.cos(np.radians(self.teta))))
                             if self.f_plot==True:
                                 ax.plot(*b8.exterior.xy)
