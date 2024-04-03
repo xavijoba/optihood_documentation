@@ -38,6 +38,7 @@ class weather:
                  clustering_vars=[],
                  save_file=False,
                  load_file=False,
+                 set_scenario=True
                  ):
         """
         Class constructor. Geographic info are taken from the source file
@@ -76,7 +77,8 @@ class weather:
         self.get_TMY_formatted()
         if self.load_file==False:
             self.get_soil()
-        self.set_solar_scenarios()
+        if set_scenario:
+            self.set_solar_scenarios(source)
         if cluster==True:
             self.do_clustering(clustering_vars)
         if save_file!=False:
@@ -149,7 +151,7 @@ class weather:
         return None
     
     def load_bld_demand(self,bld_name):
-        source=self.demand_f_adr + r"\Building2"+str(bld_name)+".csv"
+        source=self.demand_f_adr + r"\Building2"+str(int(bld_name))+".csv"
         demand=pd.read_csv(source,sep=";")
         
         return demand
@@ -162,7 +164,7 @@ class weather:
         
         
     
-    def set_solar_scenarios(self):
+    def set_solar_scenarios(self,source):
             """
             Method to set the solar scenarios with optimized azimuth and tilt 
             """
@@ -206,7 +208,11 @@ class weather:
                         'th cover ratio',
                         'th coverage','th production','th demand']
                 )
-            for bld in self.df_hood.index:    
+            tecno_list=['pv', 'solarCollector', 'pvt']
+            layout_list=['east-west','portrait']
+            arrangement_list=['south','long','short',]
+            optimality_list=['']
+            for bld in self.df_hood.building:    
                 ### method to acquire buiding hourly thermal and electricity demand
                 ### gets a DF with columns=['elec_demand','thermal_demad']
                 ### and values normalized on annual sum
@@ -216,21 +222,20 @@ class weather:
                     :,'spaceHeatingDemand']+self.load_bld_demand(
                         bld).loc[:,'domesticHotWaterDemand']
                 elec_demand=self.load_bld_demand(bld).loc[:,'electricityDemand']
-                tecno_PV=self.df_hood.loc[bld,'PV']
-                tecno_ST=self.df_hood.loc[bld,'ST']
-                tecno_PVT=self.df_hood.loc[bld,'PVT']
+                tecno_PV=self.df_hood.loc[bld,'pv']
+                tecno_ST=self.df_hood.loc[bld,'solarCollector']
+                tecno_PVT=self.df_hood.loc[bld,'pvt']
                 tecno_flag=[tecno_PV, tecno_ST, tecno_PVT]
-                tecno_list=['PV', 'ST', 'PVT']
-                layout_list=['est-west']#,'portrait']
-                arrangement_list=['south','long','short',]
+                
                 
                 
                 for lay in layout_list:
                     if lay=="portrait":
                         f_EW=False
-                        opt_type=['tilt','max4dist','tilt+5',
-                                  'tilt+10','tilt+15','tilt+20',
-                                  'tilt+25','tilt+30','tilt+35']
+                        opt_type=['tilt','max4dist','tilt+10','tilt+20']#,'tilt+30']
+                        # opt_type=['max4dist','tilt+10','tilt+20']
+                                  # 'tilt+10','tilt+15','tilt+20',
+                                  # 'tilt+25','tilt+30','tilt+35']
                     else:
                         f_EW=True
                         opt_type=['tilt']
@@ -246,11 +251,11 @@ class weather:
                                     roof_short_opt=cp(orientation=float(self.df_hood.loc[bld,'bld_orientation']),
                                        lat=float(self.df_hood.loc[bld,'latitude']),
                                        long=float(self.df_hood.loc[bld,'longitude']),
-                                       w=1,l=4,
+                                       
                                        W=float(self.df_hood.loc[bld,'short_side']),
                                        L=float(self.df_hood.loc[bld,'long_side']),
                                        tilt_EW=20,f_EW=f_EW,
-                                       f_plot=True,
+                                       f_plot=False,
                                        d_rows=0.6,
                                        parallel=arr,
                                        optimal=opt,
@@ -286,12 +291,153 @@ class weather:
                                                                       float(roof_short_opt.annual_cov_th),
                                                                       float(roof_short_opt.annual_prod_th),
                                                                       float(roof_short_opt.heat_demand.sum())
-                                                                      
                                                                       ]
-            self.solar_cases.to_csv('solar_cases.csv',sep=";")              
-    
+                #daqui
+                
+                    # print('Change of solar layout')                              
+                print('Change of building')
+            self.solar_cases.to_csv('solar_cases.csv',sep=";")   
+            self.solar_cases_select=pd.DataFrame(columns=self.solar_cases.columns)
+            for bld in self.df_hood.building:
+                for lay in layout_list:
+                    self.solar_cases_select=pd.concat([self.solar_cases_select,self.solar_cases.loc[
+                        self.solar_cases.bld_name==bld,:].loc[
+                            self.solar_cases.Techno=='pv',:].loc[
+                                self.solar_cases.cll_layout==lay,:].loc[
+                                self.solar_cases['el cover ratio']==self.solar_cases.loc[
+                                    self.solar_cases.bld_name==bld,:].loc[
+                                        self.solar_cases.Techno=='pv',:].loc[
+                                            self.solar_cases.cll_layout==lay,'el cover ratio'].max(),:]],axis=0)
+                                        
+                    self.solar_cases_select=pd.concat([self.solar_cases_select,self.solar_cases.loc[
+                        self.solar_cases.bld_name==bld,:].loc[
+                            self.solar_cases.Techno=='pv',:].loc[
+                                self.solar_cases.cll_layout==lay,:].loc[
+                                self.solar_cases['el production']==self.solar_cases.loc[
+                                    self.solar_cases.bld_name==bld,:].loc[
+                                        self.solar_cases.Techno=='pv',:].loc[
+                                            self.solar_cases.cll_layout==lay,'el production'].max(),:]],axis=0)                        
+                
+                                
+                    self.solar_cases_select=pd.concat([self.solar_cases_select,self.solar_cases.loc[
+                        self.solar_cases.bld_name==bld,:].loc[
+                            self.solar_cases.Techno=='solarCollector',:].loc[
+                                self.solar_cases.cll_layout==lay,:].loc[
+                                self.solar_cases['th cover ratio']==self.solar_cases.loc[
+                                    self.solar_cases.bld_name==bld,:].loc[
+                                        self.solar_cases.Techno=='solarCollector',:].loc[
+                                            self.solar_cases.cll_layout==lay,'th cover ratio'].max(),:]],axis=0)
+                                        
+                    self.solar_cases_select=pd.concat([self.solar_cases_select,self.solar_cases.loc[
+                        self.solar_cases.bld_name==bld,:].loc[
+                            self.solar_cases.Techno=='solarCollector',:].loc[
+                                self.solar_cases.cll_layout==lay,:].loc[
+                                self.solar_cases['th production']==self.solar_cases.loc[
+                                    self.solar_cases.bld_name==bld,:].loc[
+                                        self.solar_cases.Techno=='solarCollector',:].loc[
+                                            self.solar_cases.cll_layout==lay,'th production'].max(),:]],axis=0)                           
+                    
+                    self.solar_cases_select=pd.concat([self.solar_cases_select,self.solar_cases.loc[
+                        self.solar_cases.bld_name==bld,:].loc[
+                            self.solar_cases.Techno=='pvt',:].loc[
+                                self.solar_cases.cll_layout==lay,:].loc[
+                                self.solar_cases['th cover ratio']==self.solar_cases.loc[
+                                    self.solar_cases.bld_name==bld,:].loc[
+                                        self.solar_cases.Techno=='pvt',:].loc[
+                                            self.solar_cases.cll_layout==lay,'th cover ratio'].max(),:]],axis=0)
+                                        
+                    self.solar_cases_select=pd.concat([self.solar_cases_select,self.solar_cases.loc[
+                        self.solar_cases.bld_name==bld,:].loc[
+                            self.solar_cases.Techno=='pvt',:].loc[
+                                self.solar_cases.cll_layout==lay,:].loc[
+                                self.solar_cases['th production']==self.solar_cases.loc[
+                                    self.solar_cases.bld_name==bld,:].loc[
+                                        self.solar_cases.Techno=='pvt',:].loc[
+                                            self.solar_cases.cll_layout==lay,'th production'].max(),:]],axis=0)
+                                    
+            self.solar_cases_select.to_csv('solar_cases_select.csv',sep=";")
+            self.write_cases(source,layout_list,tecno_list)                                # self.solar_cases_select=self.solar_cases.sort_values(by=['bld_name','Techno','el cover ratio'])
+            # for bld in self.df_hood.index:
+            #     self.solar_cases_select=self.solar_cases_select.sort_values(by=['bld_name','Techno','el cover ratio'])
+            #     self.solar_cases_select=self.solar_cases_select.drop(
+            #         self.solar_cases_select.loc[self.solar_cases_select['bld_name']==bld,:].loc[
+            #             self.solar_cases_select['Techno']=='pv',:].iloc[
+            #                 :-3,:].index)
+            
+            #     self.solar_cases_select=self.solar_cases_select.sort_values(by=['bld_name','Techno','th cover ratio'])
+            
+            #     self.solar_cases_select=self.solar_cases_select.drop(
+            #         self.solar_cases_select.loc[self.solar_cases_select['bld_name']==bld,:].loc[
+            #             self.solar_cases_select['Techno']=='solarCollector',:].iloc[
+            #                 :-3,:].index)
+            #     self.solar_cases_select=self.solar_cases_select.drop(
+            #         self.solar_cases_select.loc[self.solar_cases_select['bld_name']==bld,:].loc[
+            #             self.solar_cases_select['Techno']=='pvt',:].iloc[
+            #                 :-3,:].index)  
+            # self.solar_cases_select.to_csv('solar_cases_select.csv',sep=";")             
             return None
-   
+    def write_cases(self,source,layout_list,tecno_list):
+        workbook = xlrd.open_workbook(source)
+
+        worksheet = workbook.sheet_by_name('solar')
+        wb = copy(workbook)
+        w_sheet = wb.get_sheet('solar')
+        header=['label',
+                'bld_name',
+                'from',
+                'to',
+                'connect',
+                'electrical_consumption',
+                'peripheral_losses',
+                'latitude',
+                'longitude',
+                'tilt',
+                'bld_azimut',
+                'eta_0',
+                'a_1',
+                'a_2',
+                'temp_collector_inlet',
+                'delta_temp_n',
+                'capacity_max',
+                'capacity_min',
+                'lifetime',
+                'maintenance',
+                'installation',
+                'planification',
+                'invest_base',
+                'invest_cap',
+                'heat_impact',
+                'elec_impact',
+                'impact_cap',
+                'active',
+                'zenith_angle',
+                'roof_area',
+                'efficiency',
+                'layout']
+        self.solar_cases_select.reset_index(drop=True,inplace=True)
+        for casos in range(self.solar_cases_select.index.size):
+            for j in [0,2,3,4,5,6,30]:
+                w_sheet.write(casos+1,j , self.df_tecno.loc[self.df_tecno.label==
+                                                         self.solar_cases_select.loc[casos,'Techno'],header[j]].iloc[0])
+            for j in range(11,27):
+                w_sheet.write(casos+1,j , self.df_tecno.loc[self.df_tecno.label==
+                                                         self.solar_cases_select.loc[casos,'Techno'],header[j]].iloc[0])
+            for j in [1 ,7,8,9,10]:
+                w_sheet.write(casos+1,j , self.solar_cases_select.loc[casos,header[j]])
+            
+            w_sheet.write(casos+1,31 , self.solar_cases_select.loc[casos,'cll_layout'])
+            w_sheet.write(casos+1,29 , self.solar_cases_select.loc[casos,'ratio']*self.df_hood.loc[
+                self.df_hood.building==self.solar_cases_select.loc[casos,'bld_name'],'roof_area'].iloc[0])
+            # w_sheet.write(casos,28 , self.solar_cases_select.loc[casos,'ratio'])
+            w_sheet.write(casos+1,27 , 1)
+            
+            
+        
+        wb.save(source)            
+        print('end solar optimization')        
+                
+                
+        return None
         
                 
     def get_TMY(self):

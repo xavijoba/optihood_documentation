@@ -22,7 +22,7 @@ if __name__ == '__main__':
     """ file management"""
     # define paths for input and result files
     inputFilePath = r"..\excels\clustering"
-    inputfileName = "scenario_Annual_4_costs_100%_SH35_SPT_dev.xls"
+    inputfileName = "scenario_Annual_4_costs_100%_SH35_last.xls"
     # inputfileName = "scenario.xls"
     
     resultFilePath =r"..\results"
@@ -52,7 +52,8 @@ if __name__ == '__main__':
                      cluster=clusterBool,
                      clustering_vars=[],
                      save_file=False,
-                     load_file=False)
+                     load_file=False,
+                     set_scenario=True)
     meteo_data.results.index=meteo_data.results.index.strftime('%Y-%m-%d')
     clusterBook=pd.DataFrame(meteo_data.code_BK)
     cluster=meteo_data.results['count'].to_dict()
