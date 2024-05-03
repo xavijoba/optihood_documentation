@@ -9,40 +9,35 @@ except ImportError:
 # EnergyNetworkIndiv for individual optimization
 # EnergyNetworkGroup for grouped optimization
 
-from optihood.energy_network import EnergyNetworkIndiv as EnergyNetwork
-from optihood.weather import weather as meteo
+from optihood.energy_network import EnergyNetworkGroup as EnergyNetwork
+
 # import plotting methods for Sankey and detailed plots
 
 import optihood.plot_sankey as snk
 import optihood.plot_functions as fnc
 
-print(os.path.abspath(__file__))
-
 if __name__ == '__main__':
 
     # set a time period for the optimization problem
-    timePeriod = pd.date_range("2005-01-01 00:00:00", "2005-01-03 23:00:00", freq="60min")
+    timePeriod = pd.date_range("2021-01-01 00:00:00", "2021-12-31 23:00:00", freq="60min")
 
     # define paths for input and result files
-    inputFilePath = r"..\excels\clustering"
-    inputfileName = "scenario_Annual_4_costs_100%_SH35_last.xls"
+    inputFilePath = r"..\excels\basic_example"
+    inputfileName = "scenario_b2.xls"
 
     resultFilePath =r"..\results"
-    resultFileName ="results_Annual_4_costs_100%_SH35.xlsx"
-    
-    addr_source=os.path.join(inputFilePath, inputfileName)
-    
-    meteo_data=meteo(source=addr_source)
+    resultFileName ="results.xlsx"
+
     # initialize parameters
-    numberOfBuildings = 4
-    optimizationType = "env" #"costs"  # set as "env" for environmental optimization
+    numberOfBuildings = 2
+    optimizationType = "costs"  # set as "env" for environmental optimization
 
     # create an energy network and set the network parameters from an excel file
     network = EnergyNetwork(timePeriod)
     network.setFromExcel(os.path.join(inputFilePath, inputfileName), numberOfBuildings, opt=optimizationType)
 
     # optimize the energy network
-    limit, capacitiesTransformers, capacitiesStorages = network.optimize(solver='cbc', numberOfBuildings=numberOfBuildings)
+    limit, capacitiesTransformers, capacitiesStorages = network.optimize(solver='gurobi', numberOfBuildings=numberOfBuildings)
 
     # print optimization outputs i.e. costs, environmental impact and capacities selected for different components (with investment optimization)
     network.printInvestedCapacities(capacitiesTransformers, capacitiesStorages)
@@ -58,7 +53,13 @@ if __name__ == '__main__':
     # plot sankey diagram
     UseLabelDict = True     # a dictionary defining the labels to be used for different flows
     figureFilePath = r"..\figures"
+    if not os.path.exists(figureFilePath):
+        os.makedirs(figureFilePath)
+
     sankeyFileName = f"Sankey_{numberOfBuildings}_{optimizationType}.html"
+
+    if not os.path.exists(figureFilePath):
+        os.makedirs(figureFilePath)
 
     snk.plot(os.path.join(resultFilePath, resultFileName), os.path.join(figureFilePath, sankeyFileName),
                    numberOfBuildings, UseLabelDict, labels='default', optimType='indiv')
